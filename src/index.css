@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap');
+
+@theme {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --font-sans: "Google Sans", sans-serif;
+}
+
+:root {
+  color-scheme: light;
+
+  --background: #f3ebdd;
+  --surface: #faf6ef;
+  --surface-muted: #e9decd;
+
+  --foreground: #342a23;
+  --foreground-muted: #806e5d;
+
+  --primary: #70543e;
+  --primary-hover: #5c4432;
+  --primary-foreground: #faf6ef;
+
+  --secondary: #d8c5a5;
+  --accent: #b66f50;
+
+  --border: #d8cbb9;
+  --border-strong: #bba88f;
+
+  --success: #657b60;
+  --warning: #b58a4b;
+  --danger: #a65345;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Google Sans Flex", sans-serif;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--secondary);
+  color: var(--foreground);
+}
