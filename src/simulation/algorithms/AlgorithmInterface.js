@@ -1,9 +1,9 @@
 export class AlgorithmInterface {
-  createMessage(observation, round) {
+  createMessage() {
     throw new Error("createMessage() must be implemented.");
   }
 
-  compute(observation, inbox, round) {
+  compute() {
     throw new Error("compute() must be implemented.");
   }
 }

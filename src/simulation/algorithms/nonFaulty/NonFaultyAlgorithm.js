@@ -11,8 +11,9 @@ import { Stage3 } from "./Stage3.js";
  *   Stage 2: 18*sqrt(n) additional rounds (through 77*sqrt(n))
  *   Stage 3: thereafter
  *
- * Stage 3 currently uses the documented marker-assisted DFS completion
- * procedure rather than the paper's underspecified paired-column routine.
+ * Stage 3 currently uses a marker-assisted DFS fallback. It is an explicit
+ * simulation choice, not a procedure specified by the paper, and does not
+ * claim the paper's Stage 3 complexity bounds.
  */
 export class NonFaultyAlgorithm extends AlgorithmInterface {
   constructor({ n }) {

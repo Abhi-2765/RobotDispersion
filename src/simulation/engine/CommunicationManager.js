@@ -45,7 +45,7 @@ export class CommunicationManager {
 
         outgoingMessages.push({
           senderId: sender.id,
-          payload,
+          payload: structuredClone(payload),
         });
       }
 
@@ -55,7 +55,7 @@ export class CommunicationManager {
 
           inboxes[recipient.id].push({
             fromRobotId: message.senderId,
-            payload: message.payload,
+            payload: structuredClone(message.payload),
           });
         }
       }

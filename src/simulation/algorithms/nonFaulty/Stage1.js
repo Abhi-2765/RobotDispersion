@@ -3,15 +3,14 @@ import { BoundaryNavigation } from "./navigation/BoundaryNavigation.js";
 
 const STATUS_KEY = "nonFaultyStage1";
 
-/** Stage 1: move non-singleton groups and boundary robots to grid corners. */
+/** Moto: Move non-singleton groups and boundary robots to grid corners. */
 export class Stage1 {
   constructor({ size }) {
     if (!Number.isInteger(size) || size < 2) {
       throw new Error("Stage 1 requires a square grid size of at least 2.");
     }
 
-    this.size = size;
-    this.straightLineNavigation = new StraightLineNavigation();
+    this.straightLineNavigation = new StraightLineNavigation({ size });
   }
 
   createMessage(observation, round) {
@@ -28,14 +27,42 @@ export class Stage1 {
     const navigationPhase =
       observation.memory.straightLineNavigation?.phase;
 
-    // A boundary robot may briefly probe an internal node occupied by a
-    // singleton or by another moving group. Those robots must not interpret
-    // the temporary visit as a new group: the probe robot returns next round.
+    const explorerReturnedToBoundary =
+      ["searching", "returning-home"].includes(navigationPhase) &&
+      observation.degree === 3 &&
+      this.straightLineNavigation.isAtReferenceNode(observation);
+
+    const explorerReturnedToCorner =
+      ["searching", "returning-home"].includes(navigationPhase) &&
+      observation.degree === 2 &&
+      this.straightLineNavigation.isAtReferenceNode(observation);
+
+    if (explorerReturnedToCorner) {
+      return {
+        action: { type: "stay" },
+        memoryUpdates: {
+          [STATUS_KEY]: { status: "at-corner" },
+          straightLineNavigation: { phase: "idle" },
+        },
+      };
+    }
+
+    if (explorerReturnedToBoundary) {
+      const decision = BoundaryNavigation.compute(observation);
+      return {
+        ...decision,
+        memoryUpdates: {
+          ...decision.memoryUpdates,
+          straightLineNavigation: { phase: "idle" },
+        },
+      };
+    }
+
     const boundaryProbePresent = inbox.some(
       (message) => message.payload?.type === "boundary-interior-probe"
     );
     const isThisRobotBoundaryProbe =
-      observation.memory.boundaryNavigation?.phase === "probe";
+      observation.memory.boundaryNavigation?.phase === "checking";
     if (
       observation.degree === 4 &&
       boundaryProbePresent &&
@@ -47,9 +74,7 @@ export class Stage1 {
       };
     }
 
-    // The DFS probe may temporarily visit boundary and corner nodes. Those
-    // visits are part of its bounded path enumeration, not Stage 1 arrival.
-    if (["searching", "returning"].includes(navigationPhase)) {
+    if (["searching", "returning-home"].includes(navigationPhase)) {
       return this.straightLineNavigation.compute(observation, inbox, round);
     }
 
@@ -58,6 +83,7 @@ export class Stage1 {
         action: { type: "stay" },
         memoryUpdates: {
           [STATUS_KEY]: { status: "at-corner" },
+          straightLineNavigation: { phase: "idle" },
         },
       };
     }
@@ -67,22 +93,27 @@ export class Stage1 {
     // ordinary internal-node singleton/group rules are applied.
     if (
       observation.degree === 4 &&
-      observation.memory.boundaryNavigation?.phase === "probe"
+      observation.memory.boundaryNavigation?.phase === "checking"
     ) {
       return BoundaryNavigation.compute(observation);
     }
 
     if (observation.degree === 3) {
-      return BoundaryNavigation.compute(observation);
+      const decision = BoundaryNavigation.compute(observation);
+      return {
+        ...decision,
+        memoryUpdates: {
+          ...decision.memoryUpdates,
+          straightLineNavigation: { phase: "idle" },
+        },
+      };
     }
 
     if (observation.degree === 4) {
       const navigationIsActive = [
-        "after-initial-hop",
         "waiting",
         "searching",
-        "returning",
-        "ready",
+        "returning-home",
         "idle",
       ].includes(navigationPhase);
 

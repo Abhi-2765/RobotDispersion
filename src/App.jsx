@@ -2,12 +2,22 @@ import { useState } from "react";
 import { createSimulation } from "./simulation/SimulationSetup.js";
 import { ConfigurationPage } from "./pages/ConfigurationPage.jsx";
 import { PreviewPage } from "./pages/PreviewPage.jsx";
+import { SimulatorPage } from "./pages/SimulatorPage.jsx";
+
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
 
 export default function App() {
   const [gridSize, setGridSize] = useState(6);
   const [robotCount, setRobotCount] = useState(12);
   const [algorithmMode, setAlgorithmMode] = useState("nonFaulty");
   const [simulation, setSimulation] = useState(null);
+  const [simulationSeed, setSimulationSeed] = useState(1);
   const [page, setPage] = useState("configuration");
 
   function updateGridSize(nextSize) {
@@ -15,13 +25,24 @@ export default function App() {
     setRobotCount((current) => Math.min(current, nextSize * nextSize));
   }
 
-  function createPreview() {
-    setSimulation(createSimulation({
+  function createSimulationForSeed(seed) {
+    return createSimulation({
       gridSize,
       robotCount,
       placementMode: "random",
-    }));
+      random: createSeededRandom(seed),
+    });
+  }
+
+  function createPreview() {
+    const nextSeed = simulationSeed + 1;
+    setSimulationSeed(nextSeed);
+    setSimulation(createSimulationForSeed(nextSeed));
     setPage("preview");
+  }
+
+  function resetSimulation() {
+    setSimulation(createSimulationForSeed(simulationSeed));
   }
 
   return (
@@ -43,13 +64,22 @@ export default function App() {
             onAlgorithmModeChange={setAlgorithmMode}
             onPreview={createPreview}
           />
-        ) : (
+        ) : page === "preview" ? (
           <PreviewPage
             simulation={simulation}
             gridSize={gridSize}
             algorithmMode={algorithmMode}
             onBack={() => setPage("configuration")}
             onRegenerate={createPreview}
+            onStart={() => setPage("simulator")}
+          />
+        ) : (
+          <SimulatorPage
+            simulation={simulation}
+            gridSize={gridSize}
+            algorithmMode={algorithmMode}
+            onBack={() => setPage("preview")}
+            onReset={resetSimulation}
           />
         )}
       </div>

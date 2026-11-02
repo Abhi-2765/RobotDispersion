@@ -1,21 +1,6 @@
 const MEMORY_KEY = "nonFaultyStage3";
 const MARKER_KEY = "nonFaultyStage3Marker";
 
-/**
- * Stage 3: disperse the robots gathered at the selected corner.
- *
- * The paper specifies the perimeter case and a paired-column exploration
- * outline, but it does not give a complete row-by-row placement procedure in
- * the supplied text. This implementation uses a local, marker-assisted DFS
- * as a correctness-first fallback for the column case. Settled robots act as
- * persistent node markers; the moving group carries a DFS stack and leaves
- * one robot at every newly reached empty node. Existing singleton robots are
- * initialized as markers and are never displaced.
- *
- * This fallback is deterministic and works with local port labels, but its
- * worst-case round and memory bounds are not the paper's 118*sqrt(n) and
- * O(log n) bounds. See IMPLEMENTATION_NOTES.md.
- */
 export class Stage3 {
   createMessage(observation) {
     const marker = observation.memory[MARKER_KEY];

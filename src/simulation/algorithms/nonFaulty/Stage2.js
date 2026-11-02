@@ -4,14 +4,14 @@ const MEMORY_KEY = "nonFaultyStage2";
 
 /**
  * Stage 2: gather the non-singleton corner groups at the corner containing
- * the minimum-ID corner robot.
+ * the smallest-ID robot that reached a corner.
  *
  * The highest-ID robot at every corner containing more than one robot makes
  * one complete boundary tour. The other robots remain at that corner and
  * advertise the IDs originally present there. A singleton corner remains
- * stationary; this also handles the corner-singleton case raised in the
- * annotated paper. Such a singleton is already dispersed and is left for
- * Stage 3 to treat as an occupied node.
+ * stationary; if that corner is the destination, the explorer encounters
+ * the singleton robot there. Otherwise it remains settled for Stage 3 to
+ * treat as an occupied node. Internal singleton robots are not Stage 2 targets.
  */
 export class Stage2 {
   constructor({ size }) {
@@ -19,7 +19,6 @@ export class Stage2 {
       throw new Error("Stage 2 requires a square grid size of at least 2.");
     }
 
-    this.size = size;
     this.perimeterEdges = 4 * size - 4;
   }
 
