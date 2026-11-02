@@ -72,6 +72,8 @@ export class Grid {
   // Node ID from row and col numbers
   getNodeAt(row, col) {
     if (
+      !Number.isInteger(row) ||
+      !Number.isInteger(col) ||
       row < 0 ||
       col < 0 ||
       row >= this.size ||

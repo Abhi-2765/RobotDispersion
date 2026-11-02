@@ -1,3 +1,6 @@
+import { CommunicationManager } from "./CommunicationManager.js";
+import { MovementManager } from "./MovementManager.js";
+
 export class SimulationEngine {
   constructor(simulation, algorithm) {
     if (!simulation?.grid || !Array.isArray(simulation.robots)) {
@@ -5,17 +8,21 @@ export class SimulationEngine {
     }
 
     if (
-      typeof algorithm?.communicate !== "function" ||
+      typeof algorithm?.createMessage !== "function" ||
       typeof algorithm?.compute !== "function"
     ) {
-      throw new Error("Algorithm must implement communicate() and compute().");
+      throw new Error(
+        "Algorithm must implement createMessage() and compute()."
+      );
     }
 
     this.simulation = simulation;
     this.algorithm = algorithm;
+
+    this.communicationManager = new CommunicationManager();
+    this.movementManager = new MovementManager();
   }
 
-  // restricted observations for each alive robot
   getObservations() {
     const observations = {};
 
@@ -27,119 +34,74 @@ export class SimulationEngine {
       observations[robot.id] = {
         robotId: robot.id,
         degree: node.getDegree(),
-
-        // Only local port numbers are exposed
         ports: [...node.ports.keys()],
 
-        // Only robots at the same node are visible
         coLocatedRobotIds: node.robots
           .filter((other) => other.alive)
           .map((other) => other.id),
 
-        // Private memory belonging to this robot
-        memory: { ...robot.memory },
+        memory: structuredClone(robot.memory),
+        traversalHistory: structuredClone(robot.traversalHistory),
       };
     }
 
     return observations;
   }
 
-  // one round
   step() {
-    const observations = this.getObservations();
     const nextRound = this.simulation.round + 1;
 
-    // Communicate
-    const messages = this.algorithm.communicate(
-      observations,
-      nextRound
-    ) ?? {};
+    // Phase 1: Communicate
+    const observations = this.getObservations();
 
-    // Compute
-    const decisions = this.algorithm.compute(
+    const inboxes = this.communicationManager.exchange(
+      this.simulation.robots,
       observations,
-      messages,
+      this.algorithm,
       nextRound
-    ) ?? {};
+    );
 
-    // Apply memory updates and collect movement decisions
-    const movements = [];
+    // Phase 2: Compute
+    const decisions = {};
 
     for (const robot of this.simulation.robots) {
       if (!robot.alive) continue;
 
-      const decision = decisions[robot.id] ?? {};
-      const { action, memoryUpdates } = decision;
+      const observation = observations[robot.id];
+      const inbox = inboxes[robot.id] ?? [];
 
-      if (memoryUpdates) {
-        Object.assign(robot.memory, memoryUpdates);
-      }
+      const decision =
+        this.algorithm.compute(observation, inbox, nextRound) ?? {};
 
-      if (!action || action.type === "stay") continue;
-
-      if (action.type !== "move") {
-        throw new Error(`Invalid action for robot ${robot.id}.`);
-      }
-
-      const outgoingPort = action.port;
-      const destination = robot.currentNode.ports.get(outgoingPort);
-
-      if (!destination) {
+      if (typeof decision !== "object" || Array.isArray(decision)) {
         throw new Error(
-          `Robot ${robot.id} selected invalid port ${outgoingPort}.`
+          `Algorithm returned an invalid decision for robot ${robot.id}.`
         );
       }
 
-      // Find the destination's local port back to the origin
-      const incomingPort = [...destination.ports.entries()]
-        .find(([, neighbour]) => neighbour === robot.currentNode)?.[0];
-
-      if (incomingPort === undefined) {
-        throw new Error("Grid connection is not reciprocal.");
-      }
-
-      movements.push({
-        robot,
-        origin: robot.currentNode,
-        destination,
-        outgoingPort,
-        incomingPort,
-      });
+      decisions[robot.id] = decision;
     }
 
-    // Move
-    for (const movement of movements) {
-      movement.origin.removeRobot(movement.robot.id);
-    }
-
-    for (const movement of movements) {
-      const {
-        robot,
-        destination,
-        outgoingPort,
-        incomingPort,
-      } = movement;
-
-      robot.setCurrentNode(destination);
-      robot.remember("incomingPort", incomingPort);
-
-      robot.recordTraversal(
-        nextRound,
-        outgoingPort,
-        incomingPort
-      );
-
-      destination.addRobot(robot);
-    }
+    // Phase 3: Move
+    const movementResult = this.movementManager.execute(
+      this.simulation.robots,
+      decisions,
+      nextRound
+    );
 
     this.simulation.round = nextRound;
 
     return {
       round: nextRound,
       observations,
-      messages,
+      inboxes,
       decisions,
-      movements: movements.length,
+      movements: movementResult.count,
+      movementDetails: movementResult.details,
     };
+  }
+
+  get round() {
+    return this.simulation.round;
   }
 }
