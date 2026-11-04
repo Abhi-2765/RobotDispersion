@@ -1,4 +1,6 @@
 const MEMORY_KEY = "straightLineNavigation";
+// From Z the explorer follows every three-choice continuation, in ascending
+// local-port order.
 const MAX_PATHS = 27;
 const MAX_DEPTH = 3;
 const ROUNDS_PER_GRID_EDGE = 56;
@@ -6,10 +8,11 @@ const ROUNDS_PER_GRID_EDGE = 56;
 /**
  * Straight-line movement for a non-singleton internal group.
  *
- * The group first moves together through port 1. At the destination, the
- * incoming port is the backward port. The highest-ID robot explores while
- * the rest stay at that node; the group moves together when the explorer
- * returns by two distinct routes.
+ * The group moves X -> Y through port 1. At Y, the highest-ID robot moves
+ * through the lowest port other than the backward port to Z, then searches
+ * the depth-three port tree from Z while the rest of the group waits at Y.
+ * It reports the inferred straight port after identifying two return
+ * directions at Y.
  */
 export class StraightLineNavigation {
   constructor({ size }) {
@@ -22,9 +25,21 @@ export class StraightLineNavigation {
 
   createMessage(observation) {
     const state = observation.memory[MEMORY_KEY];
-    if (!state || !["searching", "returning-home"].includes(state.phase)) {
-      return null;
+    if (!state) return null;
+
+    if (
+      ["positioned", "idle"].includes(state.phase) &&
+      observation.degree === 4 &&
+      Number.isInteger(observation.memory.incomingPort)
+    ) {
+      return {
+        type: "straight-line-arrival",
+        backwardPort: observation.memory.incomingPort,
+        lineStartedRound: state.lineStartedRound,
+      };
     }
+
+    if (!["searching", "returning-home"].includes(state.phase)) return null;
 
     if (!this.isAtReference(observation, state)) return null;
 
@@ -45,14 +60,14 @@ export class StraightLineNavigation {
 
     switch (state.phase) {
       case "positioned":
-        return this.startAtReference(observation, round, state.lineStartedRound);
+        return this.startAtReference(observation, round, state.lineStartedRound, state);
       case "waiting":
         return this.waitForDirection(observation, inbox, state, round);
       case "searching":
       case "returning-home":
         return this.search(observation, state, round);
       case "idle":
-        return this.startAtReference(observation, round, state.lineStartedRound);
+        return this.startAtReference(observation, round, state.lineStartedRound, state);
       case "boundary":
       case "singleton":
         return this.stay(state);
@@ -80,7 +95,11 @@ export class StraightLineNavigation {
 
       return this.move(
         1,
-        { phase: "positioned", lineStartedRound: round },
+        {
+          phase: "positioned",
+          groupIds: [...observation.coLocatedRobotIds],
+          lineStartedRound: round,
+        },
         round
       );
     }
@@ -88,10 +107,18 @@ export class StraightLineNavigation {
     return this.startAtReference(observation, round, round);
   }
 
-  startAtReference(observation, round, lineStartedRound = round) {
+  startAtReference(
+    observation,
+    round,
+    lineStartedRound = round,
+    previousState = null
+  ) {
     if (observation.degree !== 4) return this.stay({ phase: "boundary" });
 
-    const robotIds = observation.coLocatedRobotIds;
+    const robotIds = [...new Set([
+      ...(previousState?.groupIds ?? []),
+      ...observation.coLocatedRobotIds,
+    ])].sort((a, b) => a - b);
     if (robotIds.length < 2) return this.stay({ phase: "singleton" });
 
     const explorerId = Math.max(...robotIds);
@@ -107,29 +134,63 @@ export class StraightLineNavigation {
         phase: "waiting",
         explorerId,
         referenceIds,
+        groupIds: robotIds,
         backwardPort,
         lineStartedRound,
       });
     }
 
-    const firstPort = observation.ports
+    // The group used port 1 on X -> Y. At Y the explorer takes the lowest
+    // available port other than the backward port; this starts the 27-path
+    // probe from Z without immediately retracing the group move.
+    const firstProbePort = observation.ports
       .filter((port) => port !== backwardPort)
       .sort((a, b) => a - b)[0];
 
-    if (firstPort === undefined) {
-      throw new Error("No exploration port remains after excluding the backward port.");
+    if (firstProbePort === undefined) {
+      throw new Error("No probe port remains after excluding the backward port.");
     }
 
-    return this.move(firstPort, {
+    return this.move(firstProbePort, {
       phase: "searching",
       explorerId,
       referenceIds,
+      groupIds: robotIds,
       backwardPort,
       lineStartedRound,
       frames: [],
       returnPorts: [],
       exploredPaths: 0,
     }, round);
+  }
+
+  joinAtReference(observation, inbox, round) {
+    const arrival = inbox.find(
+      (message) => message.payload?.type === "straight-line-arrival"
+    );
+    if (!arrival) return this.stay({ phase: "singleton" });
+
+    const backwardPort = arrival.payload.backwardPort;
+    if (!observation.ports.includes(backwardPort)) {
+      throw new Error(`Arriving group supplied invalid backward port ${backwardPort}.`);
+    }
+
+    const joinedObservation = {
+      ...observation,
+      memory: {
+        ...observation.memory,
+        incomingPort: backwardPort,
+      },
+    };
+
+    // A resident singleton joins the arriving group. It inherits the local
+    // backward port observed by the robots that entered this node.
+    return this.startAtReference(
+      joinedObservation,
+      round,
+      arrival.payload.lineStartedRound,
+      { groupIds: observation.coLocatedRobotIds }
+    );
   }
 
   search(observation, previousState, round) {
@@ -152,7 +213,14 @@ export class StraightLineNavigation {
         );
         return this.move(
           straightPort,
-          { phase: "idle", lineStartedRound: state.lineStartedRound },
+          {
+            phase: "idle",
+            groupIds: [...new Set([
+              ...(state.groupIds ?? []),
+              ...observation.coLocatedRobotIds,
+            ])],
+            lineStartedRound: state.lineStartedRound,
+          },
           round
         );
       }
@@ -292,7 +360,11 @@ export class StraightLineNavigation {
     this.assertWithinRoundBound(state, round);
     return this.move(
       message.payload.port,
-      { phase: "idle", lineStartedRound: state.lineStartedRound },
+      {
+        phase: "idle",
+        groupIds: state.groupIds,
+        lineStartedRound: state.lineStartedRound,
+      },
       round
     );
   }

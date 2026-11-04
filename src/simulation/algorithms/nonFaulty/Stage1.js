@@ -27,6 +27,25 @@ export class Stage1 {
     const navigationPhase =
       observation.memory.straightLineNavigation?.phase;
 
+    if (
+      observation.degree === 4 &&
+      observation.memory[STATUS_KEY]?.status === "settled-singleton" &&
+      inbox.some((message) => message.payload?.type === "straight-line-arrival")
+    ) {
+      const decision = this.straightLineNavigation.joinAtReference(
+        observation,
+        inbox,
+        round
+      );
+      return {
+        ...decision,
+        memoryUpdates: {
+          ...decision.memoryUpdates,
+          [STATUS_KEY]: { status: "joined-moving-group" },
+        },
+      };
+    }
+
     const explorerReturnedToBoundary =
       ["searching", "returning-home"].includes(navigationPhase) &&
       observation.degree === 3 &&

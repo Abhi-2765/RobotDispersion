@@ -103,7 +103,16 @@ export function GridNetworkSvg({ nodes, gridSize, selectedNodeId, onSelectNode, 
 
   return (
     <div className="overflow-auto px-2 py-3 sm:px-4">
-      <svg className="mx-auto block w-full min-w-[440px] select-none" viewBox={`0 0 ${dimension} ${dimension}`} role="group" aria-label={`${gridSize} by ${gridSize} robot grid`}>
+      <svg
+        className="mx-auto block h-auto w-full select-none"
+        style={{
+          maxHeight: "min(80vh, max(0px, calc(100dvh - 14rem)))",
+          maxWidth: "min(80vh, max(0px, calc(100dvh - 14rem)))",
+        }}
+        viewBox={`0 0 ${dimension} ${dimension}`}
+        role="group"
+        aria-label={`${gridSize} by ${gridSize} robot grid`}
+      >
         <g className="fill-[#9a8873] text-[8px] font-semibold tracking-wide" aria-hidden="true">
           {Array.from({ length: gridSize }, (_, column) => <text key={`column-${column}`} x={PADDING + column * PITCH} y="13" textAnchor="middle">{String.fromCharCode(65 + column)}</text>)}
           {Array.from({ length: gridSize }, (_, row) => <text key={`row-${row}`} x="13" y={PADDING + row * PITCH} textAnchor="middle" dominantBaseline="central">{String(row + 1).padStart(2, "0")}</text>)}
