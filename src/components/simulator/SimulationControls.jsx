@@ -5,6 +5,8 @@ export function SimulationControls({
   speed,
   onSpeedChange,
   onStep,
+  onPreviousStep,
+  previousDisabled = false,
   onToggleRun,
   onReset,
   disabled = false,
@@ -37,6 +39,9 @@ export function SimulationControls({
             <option value={120}>Fast</option>
           </select>
         </label>
+        <button type="button" disabled={previousDisabled} onClick={onPreviousStep} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50">
+          Previous step
+        </button>
         <button type="button" disabled={disabled} onClick={onStep} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50">
           Step
         </button>

@@ -17,6 +17,7 @@ export default function App() {
   const [robotCount, setRobotCount] = useState(12);
   const [algorithmMode, setAlgorithmMode] = useState("nonFaulty");
   const [simulation, setSimulation] = useState(null);
+  const [simulationVersion, setSimulationVersion] = useState(0);
   const [simulationSeed, setSimulationSeed] = useState(1);
   const [page, setPage] = useState("configuration");
 
@@ -38,11 +39,13 @@ export default function App() {
     const nextSeed = simulationSeed + 1;
     setSimulationSeed(nextSeed);
     setSimulation(createSimulationForSeed(nextSeed));
+    setSimulationVersion((version) => version + 1);
     setPage("preview");
   }
 
   function resetSimulation() {
     setSimulation(createSimulationForSeed(simulationSeed));
+    setSimulationVersion((version) => version + 1);
   }
 
   return (
@@ -75,6 +78,7 @@ export default function App() {
           />
         ) : (
           <SimulatorPage
+            key={simulationVersion}
             simulation={simulation}
             gridSize={gridSize}
             algorithmMode={algorithmMode}

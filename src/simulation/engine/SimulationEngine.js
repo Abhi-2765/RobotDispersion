@@ -49,8 +49,34 @@ export class SimulationEngine {
   }
 
   step() {
-    const nextRound = this.simulation.round + 1;
+    const previousRound = this.simulation.round;
+    const previousStage = this.algorithm.getStage?.(previousRound) ?? null;
+    const stageCount = this.algorithm.getStageCount?.() ?? 3;
+    let nextRound = previousRound + 1;
+    let stageTransition = null;
 
+    // Stage-aware algorithms can provide a global checker. A completed stage
+    // advances on the next step, preserving the paper's round timeline by
+    // jumping over its unused waiting rounds.
+    if (
+      Number.isInteger(previousStage) &&
+      previousStage < stageCount &&
+      this.algorithm.isStageComplete?.(this.simulation, previousStage)
+    ) {
+      const boundary = this.algorithm.getStageBoundary?.(previousStage);
+      const nextStage = previousStage + 1;
+      if (Number.isInteger(boundary)) nextRound = Math.max(nextRound, boundary + 1);
+
+      this.algorithm.advanceStage?.();
+      stageTransition = {
+        fromStage: previousStage,
+        toStage: nextStage,
+        fromRound: previousRound,
+        toRound: nextRound,
+      };
+    }
+
+    try {
     // Phase 1: Communicate
     const observations = this.getObservations();
 
@@ -93,12 +119,17 @@ export class SimulationEngine {
 
     return {
       round: nextRound,
+      stageTransition,
       observations,
       inboxes,
       decisions,
       movements: movementResult.count,
       movementDetails: movementResult.details,
     };
+    } catch (error) {
+      if (stageTransition) this.algorithm.setStage?.(stageTransition.fromStage);
+      throw error;
+    }
   }
 
   get round() {

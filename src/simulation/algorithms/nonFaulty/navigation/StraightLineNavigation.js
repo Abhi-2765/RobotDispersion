@@ -1,6 +1,4 @@
 const MEMORY_KEY = "straightLineNavigation";
-// From Z the explorer follows every three-choice continuation, in ascending
-// local-port order.
 const MAX_PATHS = 27;
 const MAX_DEPTH = 3;
 const ROUNDS_PER_GRID_EDGE = 56;
@@ -50,6 +48,8 @@ export class StraightLineNavigation {
       type: "straight-line-direction",
       explorerId: observation.robotId,
       port: this.getStraightPort(observation, state, returnPorts),
+      groupIds: state.groupIds,
+      lineStartedRound: state.lineStartedRound,
     };
   }
 
@@ -160,6 +160,7 @@ export class StraightLineNavigation {
       lineStartedRound,
       frames: [],
       returnPorts: [],
+        probedPorts: [firstProbePort],
       exploredPaths: 0,
     }, round);
   }
@@ -225,6 +226,32 @@ export class StraightLineNavigation {
         );
       }
 
+      // A depth-three probe can finish without finding a second way back to
+      // the reference node. Probe another local direction and keep the return
+      // ports already observed; otherwise the explorer can arrive home with
+      // an empty DFS stack and fail before the group ever moves.
+      if (
+        state.returnPorts.length === 1 &&
+        (state.phase === "returning-home" || state.frames.length === 0)
+      ) {
+        const probedPorts = state.probedPorts ?? [];
+        const nextProbePort = observation.ports
+          .filter((port) =>
+            port !== state.backwardPort && !probedPorts.includes(port)
+          )
+          .sort((first, second) => first - second)[0];
+
+        if (nextProbePort !== undefined) {
+          return this.move(nextProbePort, {
+            ...state,
+            phase: "searching",
+            frames: [],
+            probedPorts: [...probedPorts, nextProbePort],
+            exploredPaths: 0,
+          }, round);
+        }
+      }
+
       if (state.phase === "returning-home") {
         throw new Error(
           "Straight-line DFS ended without finding two distinct return ports."
@@ -241,7 +268,12 @@ export class StraightLineNavigation {
     }
 
     if (state.phase === "returning-home") {
-      throw new Error("Explorer failed to return to its reference node.");
+      const returnPort = observation.memory.incomingPort;
+      if (!Number.isInteger(returnPort)) {
+        throw new Error("Explorer has no local port to continue returning home.");
+      }
+
+      return this.move(returnPort, state, round);
     }
 
     if (state.frames.length === 0) {

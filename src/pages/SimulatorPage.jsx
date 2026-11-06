@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GridPreview } from "../components/simulator/GridPreview.jsx";
 import { NodeInspector } from "../components/simulator/NodeInspector.jsx";
 import { RobotInspector } from "../components/simulator/RobotInspector.jsx";
 import { SimulationControls } from "../components/simulator/SimulationControls.jsx";
+import { StageProgress } from "../components/simulator/StageProgress.jsx";
 import { coordinateFor } from "../components/simulator/gridPresentation.js";
 import { SimulationEngine } from "../simulation/engine/SimulationEngine.js";
 import { NonFaultyAlgorithm } from "../simulation/algorithms/nonFaulty/NonFaultyAlgorithm.js";
@@ -16,6 +17,15 @@ function describeStep(result, previousStage, nextStage) {
     (count, inbox) => count + inbox.length,
     0
   );
+
+  if (result.stageTransition) {
+    events.push({
+      id: `${result.round}-stage-complete`,
+      round: result.round,
+      text: `Stage ${result.stageTransition.fromStage} completed. Round ${result.stageTransition.fromRound} advanced to ${result.stageTransition.toRound}.`,
+      kind: "stage",
+    });
+  }
 
   if (previousStage !== nextStage) {
     events.push({
@@ -32,6 +42,39 @@ function describeStep(result, previousStage, nextStage) {
       round: result.round,
       text: `${messageCount} message${messageCount === 1 ? "" : "s"} delivered between co-located robots`,
       kind: "communication",
+    });
+  }
+
+  const columnReports = new Map();
+  const stage3Plans = new Map();
+  for (const inbox of Object.values(result.inboxes)) {
+    for (const message of inbox) {
+      const payload = message.payload;
+      if (payload?.type === "stage3-column-report") {
+        columnReports.set(payload.columnIndex, payload);
+      } else if (payload?.type === "stage3-root-plan") {
+        const key = Object.keys(payload.assignments ?? {}).sort().join(",");
+        stage3Plans.set(key, payload);
+      }
+    }
+  }
+
+  for (const [columnIndex, report] of columnReports) {
+    events.push({
+      id: `${result.round}-stage3-column-${columnIndex}`,
+      round: result.round,
+      text: `Stage 3 survey: column ${columnIndex + 1} has ${report.emptyCount} vacant node${report.emptyCount === 1 ? "" : "s"}.`,
+      kind: "stage",
+    });
+  }
+
+  if (stage3Plans.size > 0) {
+    const plan = stage3Plans.values().next().value;
+    events.push({
+      id: `${result.round}-stage3-plan`,
+      round: result.round,
+      text: `Stage 3 dispatch plan: ${Object.keys(plan.reports ?? {}).length} columns surveyed; ${Object.keys(plan.assignments ?? {}).length} robots assigned.`,
+      kind: "stage",
     });
   }
 
@@ -66,6 +109,8 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
   const [speed, setSpeed] = useState(400);
   const [activity, setActivity] = useState([]);
   const [error, setError] = useState("");
+  const history = useRef([]);
+  const [historyLength, setHistoryLength] = useState(0);
 
   const algorithm = useMemo(
     () => new NonFaultyAlgorithm({ n: gridSize * gridSize }),
@@ -80,7 +125,8 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
   const selectedNode = selectedNodeId === null
     ? null
     : nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const stageNumber = algorithm.getStage(simulation.round);
+  const stageProgress = algorithm.getStageProgress(simulation) ?? [];
+  const stageNumber = stageProgress.find((stage) => !stage.complete)?.number ?? 3;
   const stageLabel = stageNumber === 1
     ? "1 · Move to corners"
     : stageNumber === 2
@@ -88,12 +134,18 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
       : "3 · Disperse gathered robots";
   const isFaultyMode = algorithmMode === "faulty";
   const occupiedNodes = nodes.filter((node) => node.robots.length > 0).length;
+  const simulationComplete = algorithm.isStageComplete(simulation, 3);
 
   const executeStep = useCallback(() => {
-    if (isFaultyMode) return;
+    if (isFaultyMode || algorithm.isStageComplete(simulation, 3)) {
+      setIsRunning(false);
+      return;
+    }
 
     try {
       const previousStage = algorithm.getStage(simulation.round);
+      history.current.push(captureSnapshot(simulation, algorithm));
+      setHistoryLength(history.current.length);
       const result = engine.step();
       const nextStage = algorithm.getStage(result.round);
       const events = describeStep(result, previousStage, nextStage).map((event) => {
@@ -108,24 +160,40 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
       setActivity((current) => [...events, ...current].slice(0, MAX_ACTIVITY_ITEMS));
       setError("");
     } catch (stepError) {
+      history.current.pop();
+      setHistoryLength(history.current.length);
       setIsRunning(false);
       setError(stepError instanceof Error ? stepError.message : "The simulation stopped unexpectedly.");
     }
   }, [algorithm, engine, gridSize, isFaultyMode, simulation]);
+
+  const restoreHistoryEntry = useCallback((index) => {
+    const snapshot = history.current[index];
+    if (!snapshot) return;
+
+    setIsRunning(false);
+    restoreSnapshot(simulation, algorithm, snapshot);
+    history.current = history.current.slice(0, index);
+    setHistoryLength(history.current.length);
+    setActivity((current) => current.filter((event) => event.round <= snapshot.round));
+    setError("");
+  }, [algorithm, simulation]);
+
+  const previousStep = useCallback(() => {
+    if (history.current.length === 0) return;
+    restoreHistoryEntry(history.current.length - 1);
+  }, [restoreHistoryEntry]);
+
+  const selectStage = useCallback((stageNumber) => {
+    const index = history.current.findIndex((snapshot) => snapshot.stage === stageNumber);
+    if (index >= 0) restoreHistoryEntry(index);
+  }, [restoreHistoryEntry]);
 
   useEffect(() => {
     if (!isRunning) return undefined;
     const timer = window.setInterval(executeStep, speed);
     return () => window.clearInterval(timer);
   }, [executeStep, isRunning, speed]);
-
-  useEffect(() => {
-    setIsRunning(false);
-    setActivity([]);
-    setError("");
-    setSelectedNodeId(null);
-    setSelectedRobotId(null);
-  }, [simulation]);
 
   function reset() {
     setIsRunning(false);
@@ -151,17 +219,33 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
           if (SPEED_OPTIONS.includes(nextSpeed)) setSpeed(nextSpeed);
         }}
         onStep={executeStep}
-        onToggleRun={() => setIsRunning((running) => !running)}
+        onPreviousStep={previousStep}
+        previousDisabled={historyLength === 0}
+        onToggleRun={() => {
+          if (simulationComplete) return;
+          setIsRunning((running) => !running);
+        }}
         onReset={reset}
-        disabled={isFaultyMode || Boolean(error)}
+        disabled={isFaultyMode || Boolean(error) || simulationComplete}
       />
 
+      {!isFaultyMode ? (
+        <StageProgress
+          stages={stageProgress}
+          activeStage={stageNumber}
+          onSelectStage={selectStage}
+        />
+      ) : null}
+
       {isFaultyMode ? (
-        <p className="mb-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. Return to the preview and select the non-faulty algorithm.</p>
+        <p className="mb-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. The simulation engine now accepts stage completion and progress hooks so a faulty algorithm can use the same stage controls.</p>
+      ) : null}
+      {simulationComplete && !isFaultyMode ? (
+        <p className="mb-4 rounded-lg border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every robot occupies a distinct node.</p>
       ) : null}
       {error ? <p role="alert" className="mb-4 rounded-lg border border-danger/40 bg-surface px-4 py-3 text-sm text-danger">Simulation stopped: {error}</p> : null}
       {stageNumber === 3 && !isFaultyMode ? (
-        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">Stage 3 currently runs the simulator’s marker-assisted DFS fallback. It is not the paper’s paired-column procedure.</p>
+        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">Stage 3 disperses robots across free perimeter positions or surveys columns with robot pairs before dispatching robots to free column positions.</p>
       ) : null}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
@@ -189,6 +273,40 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
       </div>
     </section>
   );
+}
+
+function captureSnapshot(simulation, algorithm) {
+  return {
+    round: simulation.round,
+    stage: algorithm.getStage(simulation.round),
+    robots: simulation.robots.map((robot) => ({
+      id: robot.id,
+      nodeId: robot.currentNode?.id ?? null,
+      alive: robot.alive,
+      role: robot.role,
+      memory: structuredClone(robot.memory),
+      traversalHistory: structuredClone(robot.traversalHistory),
+    })),
+  };
+}
+
+function restoreSnapshot(simulation, algorithm, snapshot) {
+  for (const node of simulation.grid.getAllNodes()) node.robots = [];
+
+  for (const savedRobot of snapshot.robots) {
+    const robot = simulation.robots.find((item) => item.id === savedRobot.id);
+    robot.alive = savedRobot.alive;
+    robot.role = savedRobot.role;
+    robot.currentNode = savedRobot.nodeId === null
+      ? null
+      : simulation.grid.getNodeById(savedRobot.nodeId);
+    robot.memory = structuredClone(savedRobot.memory);
+    robot.traversalHistory = structuredClone(savedRobot.traversalHistory);
+    if (robot.alive && robot.currentNode) robot.currentNode.robots.push(robot);
+  }
+
+  simulation.round = snapshot.round;
+  algorithm.setStage?.(snapshot.stage);
 }
 
 function ActivityLog({ items }) {
