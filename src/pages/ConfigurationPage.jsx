@@ -12,12 +12,10 @@ export function ConfigurationPage({
 }) {
   return (
     <section className="mx-auto max-w-xl">
-      <h2 className="mb-7 text-xl font-medium tracking-tight">Configuration</h2>
-
-      <div className="space-y-7 rounded-xl border border-border bg-surface p-5 sm:p-7">
+      <div className="space-y-7 border border-border bg-surface p-5 sm:p-7">
         <div>
           <div className="mb-2 flex items-center justify-between text-sm">
-            <label htmlFor="grid-size">Grid size</label>
+            <label className="font-semibold" htmlFor="grid-size">Grid size</label>
             <span className="tabular-nums text-foreground-muted">{gridSize} × {gridSize}</span>
           </div>
           <input
@@ -37,7 +35,7 @@ export function ConfigurationPage({
 
         <div>
           <div className="mb-2 flex items-center justify-between text-sm">
-            <label htmlFor="robot-count">Robots</label>
+            <label className="font-semibold" htmlFor="robot-count">Robots</label>
             <span className="tabular-nums text-foreground-muted">{robotCount} / {gridSize * gridSize}</span>
           </div>
           <input
@@ -53,12 +51,12 @@ export function ConfigurationPage({
         </div>
 
         <fieldset>
-          <legend className="mb-2 text-sm">Algorithm</legend>
+          <legend className="mb-2 text-sm font-semibold">Algorithm</legend>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               aria-pressed={algorithmMode === "nonFaulty"}
-              className={`rounded-lg border px-3 py-3 text-left text-sm transition-colors ${algorithmMode === "nonFaulty" ? "border-primary bg-surface-muted text-foreground" : "border-border bg-transparent text-foreground-muted hover:bg-surface-muted/60"}`}
+              className={`border px-3 py-3 text-left text-sm font-medium transition-colors ${algorithmMode === "nonFaulty" ? "border-primary bg-surface-muted text-foreground" : "border-border bg-transparent text-foreground-muted hover:bg-surface-muted/60"}`}
               onClick={() => onAlgorithmModeChange("nonFaulty")}
             >
               Non-faulty
@@ -66,7 +64,7 @@ export function ConfigurationPage({
             <button
               type="button"
               aria-pressed={algorithmMode === "faulty"}
-              className={`rounded-lg border px-3 py-3 text-left text-sm transition-colors ${algorithmMode === "faulty" ? "border-primary bg-surface-muted text-foreground" : "border-border bg-transparent text-foreground-muted hover:bg-surface-muted/60"}`}
+              className={`border px-3 py-3 text-left text-sm font-medium transition-colors ${algorithmMode === "faulty" ? "border-primary bg-surface-muted text-foreground" : "border-border bg-transparent text-foreground-muted hover:bg-surface-muted/60"}`}
               onClick={() => onAlgorithmModeChange("faulty")}
             >
               Faulty
@@ -74,14 +72,14 @@ export function ConfigurationPage({
           </div>
         </fieldset>
 
-        <div className="flex items-center justify-between text-sm rounded-lg border px-2 py-2">
+        <div className="flex items-center justify-between border border-border bg-background px-3 py-3 text-sm">
           <span>Starting positions: </span>
           <span className="text-foreground-muted">Random</span>
         </div>
 
         <button
           type="button"
-          className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+          className="w-full border border-primary bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover"
           onClick={onPreview}
         >
           Preview configuration

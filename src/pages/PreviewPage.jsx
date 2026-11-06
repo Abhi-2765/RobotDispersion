@@ -2,11 +2,16 @@ import { useState } from "react";
 import { GridPreview } from "../components/simulator/GridPreview.jsx";
 import { NodeInspector } from "../components/simulator/NodeInspector.jsx";
 import { RobotInspector } from "../components/simulator/RobotInspector.jsx";
+import { SimulationSummary } from "../components/simulator/SimulationSummary.jsx";
+import {
+  controlButtonClass,
+  primaryControlButtonClass,
+} from "../components/simulator/controlStyles.js";
 
-export function PreviewPage({ simulation, gridSize, algorithmMode, onBack, onRegenerate, onStart }) {
+export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate, onStart }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedRobotId, setSelectedRobotId] = useState(null);
-  const [showPorts, setShowPorts] = useState(true);
+  const [movingRobotId, setMovingRobotId] = useState(null);
   const nodes = simulation.grid.getAllNodes();
   const selectedNode = selectedNodeId === null
     ? null
@@ -15,25 +20,42 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onBack, onReg
   function regenerate() {
     setSelectedNodeId(null);
     setSelectedRobotId(null);
+    setMovingRobotId(null);
     onRegenerate();
+  }
+
+  function selectRobot(robotId) {
+    const robot = simulation.robots.find((item) => item.id === robotId);
+    setSelectedRobotId(robotId);
+    if (robot?.currentNode) setSelectedNodeId(robot.currentNode.id);
+    setMovingRobotId(null);
+  }
+
+  function selectNode(nodeId) {
+    setSelectedNodeId(nodeId);
+    if (movingRobotId === null) return;
+
+    const robot = simulation.robots.find((item) => item.id === movingRobotId);
+    const destination = simulation.grid.getNodeById(nodeId);
+    if (!robot?.alive || !destination) {
+      setMovingRobotId(null);
+      return;
+    }
+
+    if (robot.currentNode !== destination) {
+      robot.currentNode.removeRobot(robot.id);
+      robot.setCurrentNode(destination);
+      destination.addRobot(robot);
+    }
+
+    setSelectedRobotId(robot.id);
+    setMovingRobotId(null);
   }
 
   return (
     <section>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <button type="button" className="mb-2 text-sm text-foreground-muted hover:text-foreground" onClick={onBack}>← Configuration</button>
-          <h2 className="text-xl font-medium tracking-tight">Configuration preview</h2>
-          <p className="mt-1 text-sm text-foreground-muted">{gridSize} × {gridSize} grid · {simulation.robots.length} robots · {algorithmMode === "nonFaulty" ? "Non-faulty" : "Faulty"}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-muted" onClick={regenerate}>Regenerate</button>
-          {algorithmMode === "nonFaulty" && <button type="button" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover" onClick={onStart}>Start simulation</button>}
-        </div>
-      </div>
-
       {algorithmMode === "faulty" ? (
-        <p className="mb-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. You can still inspect this configuration.</p>
+        <p className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. You can still inspect this configuration.</p>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
@@ -41,18 +63,37 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onBack, onReg
           gridSize={gridSize}
           nodes={nodes}
           selectedNodeId={selectedNodeId}
-          onSelectNode={setSelectedNodeId}
-          showPorts={showPorts}
-          onTogglePorts={() => setShowPorts((value) => !value)}
+          selectedRobotId={selectedRobotId}
+          onSelectNode={selectNode}
+          onSelectRobot={selectRobot}
+          isMovingRobot={movingRobotId !== null}
+          summary={(
+            <SimulationSummary
+              gridSize={gridSize}
+              robotCount={simulation.robots.length}
+              algorithmMode={algorithmMode}
+              variant="inline"
+            />
+          )}
+          interactionHint={movingRobotId === null ? null : `Moving Robot ${movingRobotId}: choose a destination node.`}
+          viewportReserve={14}
         />
         <div className="space-y-4">
-          <NodeInspector node={selectedNode} gridSize={gridSize} />
+          <div className="grid grid-cols-2 gap-2" aria-label="Configuration preview actions">
+            <button type="button" className={`${controlButtonClass} w-full px-2`} onClick={regenerate}>Regenerate</button>
+            {algorithmMode === "nonFaulty" && <button type="button" className={`${primaryControlButtonClass} w-full px-2`} onClick={onStart}>Simulate</button>}
+          </div>
           <RobotInspector
             robots={simulation.robots}
             selectedRobotId={selectedRobotId}
-            onSelectRobot={setSelectedRobotId}
+            onSelectRobot={selectRobot}
             gridSize={gridSize}
+            onMoveRobot={setMovingRobotId}
+            movingRobotId={movingRobotId}
+            onCancelMove={() => setMovingRobotId(null)}
+            mode="preview"
           />
+          {selectedNode ? <NodeInspector node={selectedNode} gridSize={gridSize} /> : null}
         </div>
       </div>
     </section>

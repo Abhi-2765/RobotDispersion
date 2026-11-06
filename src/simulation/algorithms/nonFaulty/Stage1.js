@@ -21,12 +21,6 @@ export class Stage1 {
 
     if (observation.degree !== 4) return null;
     if (
-      observation.memory[STATUS_KEY]?.status === "settled-singleton" &&
-      !observation.memory.straightLineNavigation
-    ) {
-      return { type: "stage1-settled-singleton", robotId: observation.robotId };
-    }
-    if (
       observation.memory.straightLineNavigation?.phase === "waiting" &&
       Number.isInteger(observation.memory.incomingPort)
     ) {
@@ -44,6 +38,13 @@ export class Stage1 {
       observation.memory.straightLineNavigation?.phase;
 
     if (observation.degree === 4) {
+      if (observation.memory[STATUS_KEY]?.status === "settled-singleton") {
+        return {
+          action: { type: "stay" },
+          memoryUpdates: { [STATUS_KEY]: { status: "settled-singleton" } },
+        };
+      }
+
       const waitingMessages = inbox.filter(
         (message) => message.payload?.type === "stage1-line-waiting"
       );
@@ -96,7 +97,11 @@ export class Stage1 {
             restartObservation,
             round,
             round,
-            { groupIds: observation.coLocatedRobotIds }
+            {
+              groupIds:
+                observation.memory.straightLineNavigation?.groupIds ??
+                observation.coLocatedRobotIds,
+            }
           );
           return {
             ...decision,
@@ -107,80 +112,6 @@ export class Stage1 {
           };
         }
       }
-    }
-
-    const lineDirection = inbox.find(
-      (message) => message.payload?.type === "straight-line-direction"
-    );
-    if (
-      observation.degree === 4 &&
-      observation.memory[STATUS_KEY]?.status === "settled-singleton" &&
-      lineDirection &&
-      observation.ports.includes(lineDirection.payload.port)
-    ) {
-      return {
-        action: { type: "move", port: lineDirection.payload.port },
-        memoryUpdates: {
-          straightLineNavigation: {
-            phase: "idle",
-            groupIds: [...new Set([
-              ...(lineDirection.payload.groupIds ?? []),
-              ...observation.coLocatedRobotIds,
-            ])].sort((first, second) => first - second),
-            lineStartedRound: lineDirection.payload.lineStartedRound ?? round,
-          },
-          [STATUS_KEY]: { status: "joined-moving-group" },
-        },
-      };
-    }
-
-    if (
-      observation.degree === 4 &&
-      observation.memory[STATUS_KEY]?.status === "settled-singleton" &&
-      inbox.some((message) => message.payload?.type === "straight-line-arrival")
-    ) {
-      const decision = this.straightLineNavigation.joinAtReference(
-        observation,
-        inbox,
-        round
-      );
-      return {
-        ...decision,
-        memoryUpdates: {
-          ...decision.memoryUpdates,
-          [STATUS_KEY]: { status: "joined-moving-group" },
-        },
-      };
-    }
-
-    const lineState = observation.memory.straightLineNavigation;
-    if (
-      observation.degree === 4 &&
-      observation.coLocatedRobotIds.length > 1 &&
-      inbox.some((message) => message.payload?.type === "stage1-settled-singleton") &&
-      ["positioned", "idle"].includes(lineState?.phase) &&
-      Number.isInteger(lineState.lineStartedRound) &&
-      Number.isInteger(observation.memory.incomingPort)
-    ) {
-      const decision = this.straightLineNavigation.joinAtReference(
-        observation,
-        [{
-          fromRobotId: observation.robotId,
-          payload: {
-            type: "straight-line-arrival",
-            backwardPort: observation.memory.incomingPort,
-            lineStartedRound: lineState.lineStartedRound,
-          },
-        }],
-        round
-      );
-      return {
-        ...decision,
-        memoryUpdates: {
-          ...decision.memoryUpdates,
-          [STATUS_KEY]: { status: "joined-moving-group" },
-        },
-      };
     }
 
     const explorerReturnedToBoundary =

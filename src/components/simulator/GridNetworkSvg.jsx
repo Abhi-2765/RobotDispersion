@@ -55,7 +55,15 @@ function getEdges(nodes, size) {
   return edges;
 }
 
-function RobotMark({ robots }) {
+function RobotMark({
+  robots,
+  nodeId,
+  gridSize,
+  selectedRobotId,
+  onSelectRobot,
+  onSelectNode,
+  isMovingRobot,
+}) {
   
   // Positions for placing more than one robot in the grid node
   const clusterPositions = [
@@ -64,11 +72,33 @@ function RobotMark({ robots }) {
     { x: -7, y: 6 }, { x: 0, y: 5 }, { x: 7, y: 6 },
   ];
   
-  if (robots.length === 0) return <circle className="fill-[#c7b69f]" r="2.5" />;
+  if (robots.length === 0) return <circle className="fill-[var(--grid-empty)]" r="2.5" />;
   else if (robots.length === 1) {
     const robot = robots[0];
     const color = ROBOT_COLORS[(robot.id - 1) % ROBOT_COLORS.length];
-    return <circle className={`${ROBOT_DOT_CLASSES[color]} stroke-[#faf6ef] stroke-1`} r="5"><title>{`Robot ${robot.id}`}</title></circle>;
+    return <circle
+      className={`${ROBOT_DOT_CLASSES[color]} cursor-pointer stroke-[var(--surface)] transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2.5]" : "stroke-1"}`}
+      r="6"
+      role="button"
+      tabIndex="0"
+      aria-label={isMovingRobot
+        ? `Move Robot ${robot.id} to ${coordinateFor(nodeId, gridSize)}`
+        : `Select robot ${robot.id}`}
+      aria-pressed={selectedRobotId === robot.id}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (isMovingRobot) onSelectNode?.(nodeId);
+        else onSelectRobot?.(robot.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (isMovingRobot) onSelectNode?.(nodeId);
+          else onSelectRobot?.(robot.id);
+        }
+      }}
+    ><title>{`Robot ${robot.id}`}</title></circle>;
   }
 
   return <g>
@@ -77,49 +107,80 @@ function RobotMark({ robots }) {
       const color = ROBOT_COLORS[(robot.id - 1) % ROBOT_COLORS.length];
       return <circle
         key={robot.id}
-        className={`${ROBOT_DOT_CLASSES[color]} stroke-[#faf6ef] stroke-1`}
+        className={`${ROBOT_DOT_CLASSES[color]} cursor-pointer stroke-[var(--surface)] transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2]" : "stroke-1"}`}
         cx={position.x}
         cy={position.y}
-        r="3.2"
+        r={selectedRobotId === robot.id ? "4.5" : "3.8"}
+        role="button"
+        tabIndex="0"
+        aria-label={isMovingRobot
+          ? `Move Robot ${robot.id} to ${coordinateFor(nodeId, gridSize)}`
+          : `Select robot ${robot.id}`}
+        aria-pressed={selectedRobotId === robot.id}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (isMovingRobot) onSelectNode?.(nodeId);
+          else onSelectRobot?.(robot.id);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isMovingRobot) onSelectNode?.(nodeId);
+            else onSelectRobot?.(robot.id);
+          }
+        }}
       ><title>{`Robot ${robot.id}`}</title></circle>;
     })}
-    <text className="fill-[#49392d] stroke-[#faf6ef] text-[8px] font-bold [paint-order:stroke] [stroke-width:2.5px]" x="0" y="14" textAnchor="middle" dominantBaseline="central">×{robots.length}</text>
+    <text className="fill-[var(--grid-strong)] stroke-[var(--surface)] text-[8px] font-bold [paint-order:stroke] [stroke-width:2.5px]" x="0" y="14" textAnchor="middle" dominantBaseline="central">×{robots.length}</text>
   </g>;
 }
 
-function PortBump({ port, dx, dy, showPorts }) {
+function PortBump({ port, dx, dy }) {
   const x = dx * PORT_OFFSET;
   const y = dy * PORT_OFFSET;
 
   return <g>
-    <circle className="fill-[#d5c4aa] stroke-[#faf6ef] stroke-[1.5] group-hover:fill-[#bd8c68]" cx={x} cy={y} r={PORT_RADIUS} />
-    {showPorts && <text className="pointer-events-none fill-[#49392d] text-[8px] font-bold" x={x} y={y} textAnchor="middle" dominantBaseline="central">{port}</text>}
+    <circle className="fill-[var(--grid-port)] stroke-[var(--surface)] stroke-[1.5] group-hover:fill-[var(--grid-port-hover)]" cx={x} cy={y} r={PORT_RADIUS} />
+    <text className="pointer-events-none fill-[var(--grid-strong)] text-[8px] font-bold" x={x} y={y} textAnchor="middle" dominantBaseline="central">{port}</text>
   </g>;
 }
 
-export function GridNetworkSvg({ nodes, gridSize, selectedNodeId, onSelectNode, showPorts }) {
+export function GridNetworkSvg({
+  nodes,
+  gridSize,
+  selectedNodeId,
+  selectedRobotId,
+  onSelectRobot,
+  isMovingRobot,
+  onSelectNode,
+  viewportReserve = 16,
+}) {
   const dimension = PADDING * 2 + (gridSize - 1) * PITCH;
+  const preferredWidth = dimension * 1.6;
+  const availableViewport = `max(18rem, calc(100dvh - ${viewportReserve}rem))`;
   const edges = getEdges(nodes, gridSize);
 
   return (
-    <div className="overflow-auto px-2 py-3 sm:px-4">
+    <div className="overflow-auto p-1">
       <svg
         className="mx-auto block h-auto w-full select-none"
         style={{
-          maxHeight: "min(80vh, max(0px, calc(100dvh - 14rem)))",
-          maxWidth: "min(80vh, max(0px, calc(100dvh - 14rem)))",
+          width: `min(100%, ${preferredWidth}px, ${availableViewport})`,
+          maxHeight: `min(90vh, ${availableViewport})`,
+          maxWidth: `min(90vh, ${availableViewport})`,
         }}
         viewBox={`0 0 ${dimension} ${dimension}`}
         role="group"
         aria-label={`${gridSize} by ${gridSize} robot grid`}
       >
-        <g className="fill-[#9a8873] text-[8px] font-semibold tracking-wide" aria-hidden="true">
+        <g className="fill-[var(--grid-label)] text-[8px] font-semibold tracking-wide" aria-hidden="true">
           {Array.from({ length: gridSize }, (_, column) => <text key={`column-${column}`} x={PADDING + column * PITCH} y="13" textAnchor="middle">{String.fromCharCode(65 + column)}</text>)}
           {Array.from({ length: gridSize }, (_, row) => <text key={`row-${row}`} x="13" y={PADDING + row * PITCH} textAnchor="middle" dominantBaseline="central">{String(row + 1).padStart(2, "0")}</text>)}
         </g>
 
         <g aria-hidden="true">
-          {edges.map((edge) => <line key={edge.key} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} className="stroke-[#bdaa91] stroke-2 [stroke-linecap:round]" />)}
+          {edges.map((edge) => <line key={edge.key} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} className="stroke-[var(--grid-edge)] stroke-2 [stroke-linecap:round]" />)}
         </g>
 
         {nodes.map((node) => {
@@ -128,30 +189,43 @@ export function GridNetworkSvg({ nodes, gridSize, selectedNodeId, onSelectNode, 
           const type = getNodeType(row, column, gridSize);
           const { x, y } = positionFor(node, gridSize);
           const selected = node.id === selectedNodeId;
-          const nodeFill = type === "corner" ? "fill-[#efe3cb]" : type === "boundary" ? "fill-[#f6eee2]" : "fill-[#faf6ef]";
+          const nodeFill = type === "corner" ? "fill-[var(--grid-node-corner)]" : type === "boundary" ? "fill-[var(--grid-node-boundary)]" : "fill-[var(--surface)]";
 
           return <g
             key={node.id}
-            className="group cursor-pointer outline-none"
+            className="group outline-none"
             transform={`translate(${x} ${y})`}
-            role="button"
-            tabIndex="0"
+            role="group"
             aria-label={`Node ${coordinateFor(node.id, gridSize)}, degree ${node.getDegree()}, ${node.robots.length} robots`}
-            aria-pressed={selected}
-            onClick={() => onSelectNode(node.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelectNode(node.id);
-              }
-            }}
           >
-            <circle className={`stroke-[#a99477] transition-colors group-hover:fill-[#f0e2cf] group-hover:stroke-[#b66f50] group-focus-visible:stroke-[#8b5540] ${nodeFill} ${selected ? "fill-[#f0e2cf] stroke-[#b66f50] stroke-[3]" : "stroke-[1.5]"}`} r={NODE_RADIUS} />
+            <circle
+              className={`cursor-pointer stroke-[var(--grid-node-stroke)] transition-colors group-hover:fill-[var(--grid-node-hover)] group-hover:stroke-[var(--foreground)] focus-visible:stroke-[var(--foreground)] ${nodeFill} ${selected ? "fill-[var(--grid-node-hover)] stroke-[var(--foreground)] stroke-[3]" : "stroke-[1.5]"}`}
+              r={NODE_RADIUS}
+              role="button"
+              tabIndex="0"
+              aria-label={`Select node ${coordinateFor(node.id, gridSize)}`}
+              aria-pressed={selected}
+              onClick={() => onSelectNode(node.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectNode(node.id);
+                }
+              }}
+            />
             {node.getNeighbours().map(([port, neighbour]) => {
               const { dx, dy } = directionBetween(node, neighbour, gridSize);
-              return <PortBump key={port} port={port} dx={dx} dy={dy} showPorts={showPorts} />;
+              return <PortBump key={port} port={port} dx={dx} dy={dy} />;
             })}
-            <RobotMark robots={node.robots} />
+            <RobotMark
+              robots={node.robots}
+              nodeId={node.id}
+              gridSize={gridSize}
+              selectedRobotId={selectedRobotId}
+              onSelectRobot={onSelectRobot}
+              onSelectNode={onSelectNode}
+              isMovingRobot={isMovingRobot}
+            />
             <title>{`Node ${coordinateFor(node.id, gridSize)}; ports: ${node.getNeighbours().map(([port]) => port).join(", ") || "none"}; robots: ${node.robots.map((robot) => robot.id).join(", ") || "none"}`}</title>
           </g>;
         })}

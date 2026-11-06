@@ -3,6 +3,9 @@ import { createSimulation } from "./simulation/SimulationSetup.js";
 import { ConfigurationPage } from "./pages/ConfigurationPage.jsx";
 import { PreviewPage } from "./pages/PreviewPage.jsx";
 import { SimulatorPage } from "./pages/SimulatorPage.jsx";
+import { Navbar } from "./components/Navbar.jsx";
+
+const APP_TITLE = "Optimizing Robot Dispersion on Grids: with and without Fault Tolerance";
 
 function createSeededRandom(seed) {
   let state = seed >>> 0;
@@ -48,14 +51,16 @@ export default function App() {
     setSimulationVersion((version) => version + 1);
   }
 
+  const pageNavigation = page === "configuration"
+    ? { currentPage: "Configuration" }
+    : page === "preview"
+      ? { currentPage: "Configuration preview", onBack: () => setPage("configuration"), backLabel: "Back to configuration" }
+      : { currentPage: "Simulation", onBack: () => setPage("preview"), backLabel: "Back to configuration preview" };
+
   return (
     <main className="min-h-screen bg-background px-3 py-5 font-sans text-foreground sm:px-5 sm:py-7 lg:px-8">
       <div className="w-full">
-        <header className="mb-8 border-b border-border pb-4">
-          <h1 className="text-sm font-medium leading-6 sm:text-base">
-            Optimizing Robot Dispersion on Grids: with and without Fault Tolerance
-          </h1>
-        </header>
+        <Navbar title={APP_TITLE} {...pageNavigation} />
 
         {page === "configuration" ? (
           <ConfigurationPage
@@ -72,7 +77,6 @@ export default function App() {
             simulation={simulation}
             gridSize={gridSize}
             algorithmMode={algorithmMode}
-            onBack={() => setPage("configuration")}
             onRegenerate={createPreview}
             onStart={() => setPage("simulator")}
           />
@@ -82,7 +86,6 @@ export default function App() {
             simulation={simulation}
             gridSize={gridSize}
             algorithmMode={algorithmMode}
-            onBack={() => setPage("preview")}
             onReset={resetSimulation}
           />
         )}

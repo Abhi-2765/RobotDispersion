@@ -25,18 +25,6 @@ export class StraightLineNavigation {
     const state = observation.memory[MEMORY_KEY];
     if (!state) return null;
 
-    if (
-      ["positioned", "idle"].includes(state.phase) &&
-      observation.degree === 4 &&
-      Number.isInteger(observation.memory.incomingPort)
-    ) {
-      return {
-        type: "straight-line-arrival",
-        backwardPort: observation.memory.incomingPort,
-        lineStartedRound: state.lineStartedRound,
-      };
-    }
-
     if (!["searching", "returning-home"].includes(state.phase)) return null;
 
     if (!this.isAtReference(observation, state)) return null;
@@ -115,10 +103,9 @@ export class StraightLineNavigation {
   ) {
     if (observation.degree !== 4) return this.stay({ phase: "boundary" });
 
-    const robotIds = [...new Set([
-      ...(previousState?.groupIds ?? []),
-      ...observation.coLocatedRobotIds,
-    ])].sort((a, b) => a - b);
+    const knownGroupIds = previousState?.groupIds ?? observation.coLocatedRobotIds;
+    const robotIds = [...new Set([...knownGroupIds, observation.robotId])]
+      .sort((a, b) => a - b);
     if (robotIds.length < 2) return this.stay({ phase: "singleton" });
 
     const explorerId = Math.max(...robotIds);
@@ -165,35 +152,6 @@ export class StraightLineNavigation {
     }, round);
   }
 
-  joinAtReference(observation, inbox, round) {
-    const arrival = inbox.find(
-      (message) => message.payload?.type === "straight-line-arrival"
-    );
-    if (!arrival) return this.stay({ phase: "singleton" });
-
-    const backwardPort = arrival.payload.backwardPort;
-    if (!observation.ports.includes(backwardPort)) {
-      throw new Error(`Arriving group supplied invalid backward port ${backwardPort}.`);
-    }
-
-    const joinedObservation = {
-      ...observation,
-      memory: {
-        ...observation.memory,
-        incomingPort: backwardPort,
-      },
-    };
-
-    // A resident singleton joins the arriving group. It inherits the local
-    // backward port observed by the robots that entered this node.
-    return this.startAtReference(
-      joinedObservation,
-      round,
-      arrival.payload.lineStartedRound,
-      { groupIds: observation.coLocatedRobotIds }
-    );
-  }
-
   search(observation, previousState, round) {
     const state = structuredClone(previousState);
     this.assertWithinRoundBound(state, round);
@@ -216,10 +174,7 @@ export class StraightLineNavigation {
           straightPort,
           {
             phase: "idle",
-            groupIds: [...new Set([
-              ...(state.groupIds ?? []),
-              ...observation.coLocatedRobotIds,
-            ])],
+            groupIds: [...new Set(state.groupIds ?? observation.coLocatedRobotIds)],
             lineStartedRound: state.lineStartedRound,
           },
           round

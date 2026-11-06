@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GridPreview } from "../components/simulator/GridPreview.jsx";
+import { SimulationSummary } from "../components/simulator/SimulationSummary.jsx";
 import { NodeInspector } from "../components/simulator/NodeInspector.jsx";
 import { RobotInspector } from "../components/simulator/RobotInspector.jsx";
 import { SimulationControls } from "../components/simulator/SimulationControls.jsx";
@@ -82,7 +83,7 @@ function describeStep(result, previousStage, nextStage) {
     events.push({
       id: `${result.round}-robot-${movement.robotId}`,
       round: result.round,
-      text: `Robot #${movement.robotId} moved through local port ${movement.outgoingPort}`,
+      text: `Robot ${movement.robotId} moved through local port ${movement.outgoingPort}`,
       kind: "movement",
       port: movement.outgoingPort,
       robotId: movement.robotId,
@@ -101,10 +102,9 @@ function describeStep(result, previousStage, nextStage) {
   return events;
 }
 
-export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onReset }) {
+export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedRobotId, setSelectedRobotId] = useState(null);
-  const [showPorts, setShowPorts] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [speed, setSpeed] = useState(400);
   const [activity, setActivity] = useState([]);
@@ -127,11 +127,6 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
     : nodes.find((node) => node.id === selectedNodeId) ?? null;
   const stageProgress = algorithm.getStageProgress(simulation) ?? [];
   const stageNumber = stageProgress.find((stage) => !stage.complete)?.number ?? 3;
-  const stageLabel = stageNumber === 1
-    ? "1 · Move to corners"
-    : stageNumber === 2
-      ? "2 · Gather at minimum-ID corner"
-      : "3 · Disperse gathered robots";
   const isFaultyMode = algorithmMode === "faulty";
   const occupiedNodes = nodes.filter((node) => node.robots.length > 0).length;
   const simulationComplete = algorithm.isStageComplete(simulation, 3);
@@ -153,7 +148,7 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
         const robot = simulation.robots.find((item) => item.id === event.robotId);
         return {
           ...event,
-          text: `Robot #${event.robotId} moved through port ${event.port} to ${coordinateFor(robot.currentNode.id, gridSize)}`,
+          text: `Robot ${event.robotId} moved through port ${event.port} to ${coordinateFor(robot.currentNode.id, gridSize)}`,
         };
       });
 
@@ -202,17 +197,8 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
 
   return (
     <section className="w-full">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <button type="button" className="mb-2 text-sm text-foreground-muted hover:text-foreground" onClick={onBack}>← Configuration preview</button>
-          <h2 className="text-xl font-medium tracking-tight">Simulation</h2>
-          <p className="mt-1 text-sm text-foreground-muted">{gridSize} × {gridSize} grid · {simulation.robots.length} robots · {occupiedNodes} occupied nodes</p>
-        </div>
-      </div>
-
       <SimulationControls
         round={simulation.round}
-        stage={stageLabel}
         isRunning={isRunning}
         speed={speed}
         onSpeedChange={(nextSpeed) => {
@@ -227,42 +213,52 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onBack, onR
         }}
         onReset={reset}
         disabled={isFaultyMode || Boolean(error) || simulationComplete}
-      />
-
-      {!isFaultyMode ? (
-        <StageProgress
-          stages={stageProgress}
-          activeStage={stageNumber}
-          onSelectStage={selectStage}
-        />
-      ) : null}
+      >
+        {!isFaultyMode ? (
+          <StageProgress
+            stages={stageProgress}
+            activeStage={stageNumber}
+            onSelectStage={selectStage}
+          />
+        ) : null}
+      </SimulationControls>
 
       {isFaultyMode ? (
-        <p className="mb-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. The simulation engine now accepts stage completion and progress hooks so a faulty algorithm can use the same stage controls.</p>
+        <p className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. The simulation engine now accepts stage completion and progress hooks so a faulty algorithm can use the same stage controls.</p>
       ) : null}
       {simulationComplete && !isFaultyMode ? (
-        <p className="mb-4 rounded-lg border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every robot occupies a distinct node.</p>
+        <p className="mb-4 border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every robot occupies a distinct node.</p>
       ) : null}
-      {error ? <p role="alert" className="mb-4 rounded-lg border border-danger/40 bg-surface px-4 py-3 text-sm text-danger">Simulation stopped: {error}</p> : null}
+      {error ? <p role="alert" className="mb-4 border border-danger/40 bg-surface px-4 py-3 text-sm text-danger">Simulation stopped: {error}</p> : null}
       {stageNumber === 3 && !isFaultyMode ? (
         <p className="mb-4 text-xs leading-relaxed text-foreground-muted">Stage 3 disperses robots across free perimeter positions or surveys columns with robot pairs before dispatching robots to free column positions.</p>
       ) : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
-        <div className="min-w-0 space-y-5">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="min-w-0 space-y-4">
           <GridPreview
             gridSize={gridSize}
             nodes={nodes}
             selectedNodeId={selectedNodeId}
+            selectedRobotId={selectedRobotId}
             onSelectNode={setSelectedNodeId}
-            showPorts={showPorts}
-            onTogglePorts={() => setShowPorts((value) => !value)}
+            onSelectRobot={setSelectedRobotId}
+            summary={(
+              <SimulationSummary
+                gridSize={gridSize}
+                robotCount={simulation.robots.length}
+                occupiedNodes={occupiedNodes}
+                algorithmMode={algorithmMode}
+                variant="inline"
+              />
+            )}
+            viewportReserve={14}
           />
           <ActivityLog items={activity} />
         </div>
 
         <div className="space-y-4">
-          <NodeInspector node={selectedNode} gridSize={gridSize} />
+          {selectedNode ? <NodeInspector node={selectedNode} gridSize={gridSize} /> : null}
           <RobotInspector
             robots={simulation.robots}
             selectedRobotId={selectedRobotId}
@@ -311,15 +307,15 @@ function restoreSnapshot(simulation, algorithm, snapshot) {
 
 function ActivityLog({ items }) {
   return (
-    <section className="rounded-xl border border-border bg-surface" aria-label="Simulation activity">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h3 className="text-sm font-medium">Activity</h3>
+    <details className="border border-border bg-surface" aria-label="Simulation activity">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <h3 className="text-base font-bold">Activity</h3>
         <span className="text-xs tabular-nums text-foreground-muted">{items.length} recent events</span>
-      </div>
+      </summary>
       {items.length === 0 ? (
         <p className="px-4 py-5 text-sm text-foreground-muted">Step or run the simulation to see actual communication and movement events.</p>
       ) : (
-        <ol className="max-h-72 divide-y divide-border overflow-y-auto px-4">
+        <ol className="max-h-72 divide-y divide-border overflow-y-auto border-t border-border px-4">
           {items.map((event) => (
             <li key={event.id} className="flex gap-4 py-2.5 text-sm">
               <span className="w-16 shrink-0 text-xs tabular-nums text-foreground-muted">Round {event.round}</span>
@@ -328,6 +324,6 @@ function ActivityLog({ items }) {
           ))}
         </ol>
       )}
-    </section>
+    </details>
   );
 }

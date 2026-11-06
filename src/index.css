@@ -29,26 +29,69 @@
 :root {
   color-scheme: light;
 
-  --background: #f3ebdd;
-  --surface: #faf6ef;
-  --surface-muted: #e9decd;
+  
+   /* * Warm theme — retained for quick restoration.
+   * Replace the active token block below with this block to switch back.
+   * */
+    --background: #f3ebdd;
+    --surface: #faf6ef;
+    --surface-muted: #e9decd;
+    --foreground: #342a23;
+    --foreground-muted: #806e5d;
+    --primary: #70543e;
+    --primary-hover: #5c4432;
+    --primary-foreground: #faf6ef;
+    --secondary: #d8c5a5;
+    --accent: #b66f50;
+    --border: #d8cbb9;
+   --border-strong: #bba88f;
+    --success: #657b60;
+    --warning: #b58a4b;
+    --danger: #a65345;
+    --grid-empty: #c7b69f;
+    --grid-node-corner: #efe3cb;
+    --grid-node-boundary: #f6eee2;
+    --grid-node-hover: #f0e2cf;
+    --grid-node-stroke: #a99477;
+    --grid-edge: #bdaa91;
+    --grid-port: #d5c4aa;
+    --grid-port-hover: #bd8c68;
+    --grid-label: #9a8873;
+    --grid-strong: #49392d;
+  
 
-  --foreground: #342a23;
-  --foreground-muted: #806e5d;
+  /* Active monochrome theme. Keep these token names for component compatibility. */
+  /* --background: #f6f6f4;
+  --surface: #ffffff;
+  --surface-muted: #ececea;
 
-  --primary: #70543e;
-  --primary-hover: #5c4432;
-  --primary-foreground: #faf6ef;
+  --foreground: #171717;
+  --foreground-muted: #666663;
 
-  --secondary: #d8c5a5;
-  --accent: #b66f50;
+  --primary: #242424;
+  --primary-hover: #000000;
+  --primary-foreground: #ffffff;
 
-  --border: #d8cbb9;
-  --border-strong: #bba88f;
+  --secondary: #dededb;
+  --accent: #4b4b49;
 
-  --success: #657b60;
-  --warning: #b58a4b;
-  --danger: #a65345;
+  --border: #d1d1cd;
+  --border-strong: #a3a39e;
+
+  --success: #3f3f3d;
+  --warning: #555552;
+  --danger: #2c2c2a;
+
+  --grid-empty: #b7b7b2;
+  --grid-node-corner: #e6e6e2;
+  --grid-node-boundary: #f1f1ee;
+  --grid-node-hover: #ddddda;
+  --grid-node-stroke: #969691;
+  --grid-edge: #bebeb9;
+  --grid-port: #d5d5d0;
+  --grid-port-hover: #b6b6b1;
+  --grid-label: #777773;
+  --grid-strong: #30302e; */
 }
 
 * {
@@ -65,9 +108,22 @@ body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Google Sans Flex", sans-serif;
+  font-family: "Google Sans", sans-serif;
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
+}
+
+button,
+select,
+input[type="range"] {
+  accent-color: var(--primary);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button,
