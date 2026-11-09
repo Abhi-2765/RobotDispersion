@@ -2,7 +2,7 @@ import { CommunicationManager } from "./CommunicationManager.js";
 import { MovementManager } from "./MovementManager.js";
 
 export class SimulationEngine {
-  constructor(simulation, algorithm) {
+  constructor(simulation, algorithm, options = {}) {
     if (!simulation?.grid || !Array.isArray(simulation.robots)) {
       throw new Error("Invalid simulation.");
     }
@@ -18,9 +18,32 @@ export class SimulationEngine {
 
     this.simulation = simulation;
     this.algorithm = algorithm;
+    this.crashProbability = options.crashProbability ?? 0;
+    this.random = options.random ?? Math.random;
 
     this.communicationManager = new CommunicationManager();
     this.movementManager = new MovementManager();
+  }
+
+  setCrashProbability(probability) {
+    this.crashProbability = Math.max(0, Math.min(1, probability));
+  }
+
+  injectFaults() {
+    if (this.crashProbability <= 0) return [];
+    const crashed = [];
+    const living = this.simulation.robots.filter((r) => r.alive);
+    if (living.length <= 1) return [];
+
+    for (const robot of living) {
+      // Keep at least 1 robot alive
+      if (this.simulation.robots.filter((r) => r.alive).length <= 1) break;
+      if (this.random() < this.crashProbability) {
+        robot.crash();
+        crashed.push(robot.id);
+      }
+    }
+    return crashed;
   }
 
   getObservations() {
@@ -77,6 +100,8 @@ export class SimulationEngine {
     }
 
     try {
+    const crashedRobotIds = this.injectFaults();
+
     // Phase 1: Communicate
     const observations = this.getObservations();
 
@@ -120,6 +145,7 @@ export class SimulationEngine {
     return {
       round: nextRound,
       stageTransition,
+      crashedRobotIds,
       observations,
       inboxes,
       decisions,

@@ -54,10 +54,6 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate,
 
   return (
     <section>
-      {algorithmMode === "faulty" ? (
-        <p className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. You can still inspect this configuration.</p>
-      ) : null}
-
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
         <GridPreview
           gridSize={gridSize}
@@ -81,7 +77,7 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate,
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2" aria-label="Configuration preview actions">
             <button type="button" className={`${controlButtonClass} w-full px-2`} onClick={regenerate}>Regenerate</button>
-            {algorithmMode === "nonFaulty" && <button type="button" className={`${primaryControlButtonClass} w-full px-2`} onClick={onStart}>Simulate</button>}
+            <button type="button" className={`${primaryControlButtonClass} w-full px-2`} onClick={onStart}>Simulate</button>
           </div>
           <RobotInspector
             robots={simulation.robots}

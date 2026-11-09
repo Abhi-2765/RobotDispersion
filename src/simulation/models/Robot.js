@@ -48,6 +48,10 @@ export class Robot {
   // Simulate Crash
   crash() {
     this.alive = false;
+    if (this.currentNode) {
+      this.currentNode.removeRobot(this.id);
+    }
     this.currentNode = null;
+    this.role = "crashed";
   }
 }

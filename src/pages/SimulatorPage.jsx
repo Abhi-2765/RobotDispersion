@@ -8,6 +8,7 @@ import { StageProgress } from "../components/simulator/StageProgress.jsx";
 import { coordinateFor } from "../components/simulator/gridPresentation.js";
 import { SimulationEngine } from "../simulation/engine/SimulationEngine.js";
 import { NonFaultyAlgorithm } from "../simulation/algorithms/nonFaulty/NonFaultyAlgorithm.js";
+import { FaultyAlgorithm } from "../simulation/algorithms/faulty/FaultyAlgorithm.js";
 
 const SPEED_OPTIONS = [120, 400, 1000];
 const MAX_ACTIVITY_ITEMS = 120;
@@ -18,6 +19,17 @@ function describeStep(result, previousStage, nextStage) {
     (count, inbox) => count + inbox.length,
     0
   );
+
+  if (result.crashedRobotIds?.length > 0) {
+    for (const crashedId of result.crashedRobotIds) {
+      events.push({
+        id: `${result.round}-crash-${crashedId}`,
+        round: result.round,
+        text: `Robot ${crashedId} suffered a crash fault! (Robot removed/inactive)`,
+        kind: "fault",
+      });
+    }
+  }
 
   if (result.stageTransition) {
     events.push({
@@ -56,6 +68,27 @@ function describeStep(result, previousStage, nextStage) {
       } else if (payload?.type === "stage3-root-plan") {
         const key = Object.keys(payload.assignments ?? {}).sort().join(",");
         stage3Plans.set(key, payload);
+      } else if (payload?.type === "faulty-straight-direction") {
+        events.push({
+          id: `${result.round}-faulty-straight-${message.fromRobotId}`,
+          round: result.round,
+          text: `Scout ${message.fromRobotId} reported straight-line port ${payload.port} to waiting base`,
+          kind: "stage",
+        });
+      } else if (payload?.type === "faulty-stage2-target") {
+        events.push({
+          id: `${result.round}-faulty-target-${message.fromRobotId}`,
+          round: result.round,
+          text: `Seeker ${message.fromRobotId} reported minimum ID ${payload.targetId}; group migrating to winner corner`,
+          kind: "stage",
+        });
+      } else if (payload?.type === "faulty-stage3-plan") {
+        events.push({
+          id: `${result.round}-faulty-plan-${payload.rootId}`,
+          round: result.round,
+          text: `Root ${payload.rootId} dispatched fault-tolerant dispersion plan`,
+          kind: "stage",
+        });
       }
     }
   }
@@ -112,9 +145,13 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
   const history = useRef([]);
   const [historyLength, setHistoryLength] = useState(0);
 
+  const isFaultyMode = algorithmMode === "faulty";
+
   const algorithm = useMemo(
-    () => new NonFaultyAlgorithm({ n: gridSize * gridSize }),
-    [gridSize]
+    () => (isFaultyMode
+      ? new FaultyAlgorithm({ n: gridSize * gridSize })
+      : new NonFaultyAlgorithm({ n: gridSize * gridSize })),
+    [gridSize, isFaultyMode]
   );
   const engine = useMemo(
     () => new SimulationEngine(simulation, algorithm),
@@ -127,12 +164,31 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
     : nodes.find((node) => node.id === selectedNodeId) ?? null;
   const stageProgress = algorithm.getStageProgress(simulation) ?? [];
   const stageNumber = stageProgress.find((stage) => !stage.complete)?.number ?? 3;
-  const isFaultyMode = algorithmMode === "faulty";
-  const occupiedNodes = nodes.filter((node) => node.robots.length > 0).length;
+  const livingRobots = simulation.robots.filter((robot) => robot.alive);
+  const occupiedNodes = nodes.filter((node) => node.robots.some((r) => r.alive)).length;
   const simulationComplete = algorithm.isStageComplete(simulation, 3);
 
+  const crashRobot = useCallback((robotId) => {
+    const robot = simulation.robots.find((item) => item.id === robotId);
+    if (!robot || !robot.alive) return;
+
+    history.current.push(captureSnapshot(simulation, algorithm));
+    setHistoryLength(history.current.length);
+    robot.crash();
+
+    setActivity((current) => [
+      {
+        id: `${simulation.round}-manual-crash-${robotId}`,
+        round: simulation.round,
+        text: `Robot ${robotId} crashed (simulated crash fault).`,
+        kind: "fault",
+      },
+      ...current,
+    ].slice(0, MAX_ACTIVITY_ITEMS));
+  }, [algorithm, simulation]);
+
   const executeStep = useCallback(() => {
-    if (isFaultyMode || algorithm.isStageComplete(simulation, 3)) {
+    if (algorithm.isStageComplete(simulation, 3)) {
       setIsRunning(false);
       return;
     }
@@ -160,7 +216,7 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
       setIsRunning(false);
       setError(stepError instanceof Error ? stepError.message : "The simulation stopped unexpectedly.");
     }
-  }, [algorithm, engine, gridSize, isFaultyMode, simulation]);
+  }, [algorithm, engine, gridSize, simulation]);
 
   const restoreHistoryEntry = useCallback((index) => {
     const snapshot = history.current[index];
@@ -212,22 +268,22 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
           setIsRunning((running) => !running);
         }}
         onReset={reset}
-        disabled={isFaultyMode || Boolean(error) || simulationComplete}
+        disabled={Boolean(error) || simulationComplete}
       >
-        {!isFaultyMode ? (
-          <StageProgress
-            stages={stageProgress}
-            activeStage={stageNumber}
-            onSelectStage={selectStage}
-          />
-        ) : null}
+        <StageProgress
+          stages={stageProgress}
+          activeStage={stageNumber}
+          onSelectStage={selectStage}
+        />
       </SimulationControls>
 
       {isFaultyMode ? (
-        <p className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">Faulty-robot execution is not implemented yet. The simulation engine now accepts stage completion and progress hooks so a faulty algorithm can use the same stage controls.</p>
+        <p className="mb-4 border border-border bg-surface px-4 py-2.5 text-xs leading-relaxed text-foreground-muted">
+          Fault-tolerant mode active (O(√n log n) rounds, Section 4 of Banerjee et al.). Robots coordinate via halving scout/seeker groups and timeouts. You can crash any robot anytime using the <strong>💥 Crash robot</strong> button in Robot details.
+        </p>
       ) : null}
-      {simulationComplete && !isFaultyMode ? (
-        <p className="mb-4 border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every robot occupies a distinct node.</p>
+      {simulationComplete ? (
+        <p className="mb-4 border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every living robot occupies a distinct node.</p>
       ) : null}
       {error ? <p role="alert" className="mb-4 border border-danger/40 bg-surface px-4 py-3 text-sm text-danger">Simulation stopped: {error}</p> : null}
       {stageNumber === 3 && !isFaultyMode ? (
@@ -246,7 +302,7 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
             summary={(
               <SimulationSummary
                 gridSize={gridSize}
-                robotCount={simulation.robots.length}
+                robotCount={livingRobots.length}
                 occupiedNodes={occupiedNodes}
                 algorithmMode={algorithmMode}
                 variant="inline"
@@ -264,6 +320,7 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
             selectedRobotId={selectedRobotId}
             onSelectRobot={setSelectedRobotId}
             gridSize={gridSize}
+            onCrashRobot={isFaultyMode ? crashRobot : null}
           />
         </div>
       </div>
