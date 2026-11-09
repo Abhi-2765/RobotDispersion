@@ -135,13 +135,14 @@ function describeStep(result, previousStage, nextStage) {
   return events;
 }
 
-export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) {
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
+export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, onFullscreenChange }) {
+  const [selectedNodeId, setSelectedNodeId] = useState(0);
   const [selectedRobotId, setSelectedRobotId] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [speed, setSpeed] = useState(400);
   const [activity, setActivity] = useState([]);
   const [error, setError] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const history = useRef([]);
   const [historyLength, setHistoryLength] = useState(0);
 
@@ -276,7 +277,13 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
           onSelectStage={selectStage}
         />
       </SimulationControls>
+  function changeFullscreen(nextValue) {
+    setIsFullscreen(nextValue);
+    onFullscreenChange?.(nextValue);
+  }
 
+  return (
+    <section className={`${isFullscreen ? "fixed inset-0 z-50 overflow-y-auto bg-background" : "w-full"}`}>
       {isFaultyMode ? (
         <p className="mb-4 border border-border bg-surface px-4 py-2.5 text-xs leading-relaxed text-foreground-muted">
           Fault-tolerant mode active (O(√n log n) rounds, Section 4 of Banerjee et al.). Robots coordinate via halving scout/seeker groups and timeouts. You can crash any robot anytime using the <strong>💥 Crash robot</strong> button in Robot details.
@@ -286,12 +293,9 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
         <p className="mb-4 border border-success/40 bg-surface px-4 py-3 text-sm text-success">Dispersion complete: every living robot occupies a distinct node.</p>
       ) : null}
       {error ? <p role="alert" className="mb-4 border border-danger/40 bg-surface px-4 py-3 text-sm text-danger">Simulation stopped: {error}</p> : null}
-      {stageNumber === 3 && !isFaultyMode ? (
-        <p className="mb-4 text-xs leading-relaxed text-foreground-muted">Stage 3 disperses robots across free perimeter positions or surveys columns with robot pairs before dispatching robots to free column positions.</p>
-      ) : null}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="min-w-0 space-y-4">
+      <div className={`grid items-stretch gap-0 xl:grid-cols-[minmax(0,1fr)_17rem] ${isFullscreen ? "min-h-dvh" : ""}`}>
+        <div className="min-w-0">
           <GridPreview
             gridSize={gridSize}
             nodes={nodes}
@@ -308,12 +312,40 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset }) 
                 variant="inline"
               />
             )}
-            viewportReserve={14}
+            viewportReserve={isFullscreen ? 7 : 14}
+            isFullscreen={isFullscreen}
+            onFullscreenChange={changeFullscreen}
           />
-          <ActivityLog items={activity} />
+          {!isFullscreen ? <ActivityLog items={activity} /> : null}
         </div>
 
-        <div className="space-y-4">
+        <div className="flex h-full min-h-full flex-col border-l border-border bg-surface">
+          <SimulationControls
+            compact
+            round={simulation.round}
+            isRunning={isRunning}
+            speed={speed}
+            onSpeedChange={(nextSpeed) => {
+              if (SPEED_OPTIONS.includes(nextSpeed)) setSpeed(nextSpeed);
+            }}
+            onStep={executeStep}
+            onPreviousStep={previousStep}
+            previousDisabled={historyLength === 0}
+            onToggleRun={() => {
+              if (simulationComplete) return;
+              setIsRunning((running) => !running);
+            }}
+            onReset={reset}
+            disabled={isFaultyMode || Boolean(error) || simulationComplete}
+          >
+            {!isFaultyMode ? (
+              <StageProgress
+                stages={stageProgress}
+                activeStage={stageNumber}
+                onSelectStage={selectStage}
+              />
+            ) : null}
+          </SimulationControls>
           {selectedNode ? <NodeInspector node={selectedNode} gridSize={gridSize} /> : null}
           <RobotInspector
             robots={simulation.robots}
