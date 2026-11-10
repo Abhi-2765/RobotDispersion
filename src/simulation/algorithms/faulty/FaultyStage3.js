@@ -88,6 +88,7 @@ export class FaultyStage3 {
 
     if (
       observation.degree === 2 &&
+      observation.coLocatedRobotIds.length === 1 &&
       observation.memory.faultyStage2?.role === "singleton-corner"
     ) {
       return {
@@ -104,8 +105,9 @@ export class FaultyStage3 {
       const rootId = coLocatedIds[0];
 
       if (observation.robotId === rootId) {
-        // Coordinator creates dispersion assignments
-        const assignments = this.createDispersionPlan(coLocatedIds);
+        // Coordinator creates dispersion assignments skipping already-occupied corners
+        const occupiedCornerSteps = observation.memory.faultyStage2?.occupiedCornerSteps ?? [];
+        const assignments = this.createDispersionPlan(coLocatedIds, occupiedCornerSteps);
         return {
           action: { type: "stay" },
           memoryUpdates: {
@@ -141,17 +143,26 @@ export class FaultyStage3 {
     };
   }
 
-  createDispersionPlan(robotIds) {
+  createDispersionPlan(robotIds, occupiedSteps = []) {
     const assignments = {};
     const total = robotIds.length;
     const maxPerimeter = this.perimeterEdges;
+    const occupiedSet = new Set(occupiedSteps);
 
-    if (total <= maxPerimeter) {
+    // Free perimeter steps (excluding 0, which is the root corner itself, and any occupied corners)
+    const freeSteps = [];
+    for (let s = 1; s < maxPerimeter; s++) {
+      if (!occupiedSet.has(s)) {
+        freeSteps.push(s);
+      }
+    }
+
+    if (total <= freeSteps.length + 1) {
       // Direct perimeter dispersion by rank
       robotIds.forEach((id, rank) => {
         assignments[id] = {
           mode: "perimeter",
-          targetSteps: rank,
+          targetSteps: rank === 0 ? 0 : freeSteps[rank - 1],
         };
       });
       return assignments;
@@ -161,14 +172,14 @@ export class FaultyStage3 {
     const interiorColumns = Math.max(1, this.size - 2);
     let assignedIndex = 0;
 
-    for (let c = 0; c < interiorColumns && assignedIndex < total - maxPerimeter; c++) {
+    for (let c = 0; c < interiorColumns && assignedIndex < total - freeSteps.length - 1; c++) {
       const colIndex = c + 1;
       const batchSize = Math.min(
         this.size,
         Math.max(1, Math.floor((total - assignedIndex) / (this.size - c)))
       );
 
-      for (let b = 0; b < batchSize && assignedIndex < total - maxPerimeter; b++) {
+      for (let b = 0; b < batchSize && assignedIndex < total - freeSteps.length - 1; b++) {
         const id = robotIds[assignedIndex++];
         assignments[id] = {
           mode: "column",
@@ -178,14 +189,15 @@ export class FaultyStage3 {
       }
     }
 
-    // Remaining robots take perimeter positions
+    // Remaining robots take free perimeter positions
     let perimRank = 0;
     while (assignedIndex < total) {
       const id = robotIds[assignedIndex++];
       assignments[id] = {
         mode: "perimeter",
-        targetSteps: perimRank++,
+        targetSteps: perimRank === 0 ? 0 : (freeSteps[perimRank - 1] ?? perimRank),
       };
+      perimRank++;
     }
 
     return assignments;

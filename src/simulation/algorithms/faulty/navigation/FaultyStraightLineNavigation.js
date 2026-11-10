@@ -190,10 +190,12 @@ export class FaultyStraightLineNavigation {
 
     // 2. Check for Timeout: Have all scouts crashed?
     if (round >= state.timeoutRound) {
-      // The scouts have crashed! Filter living peers at this node
-      const survivingIds = observation.coLocatedRobotIds.sort((a, b) => a - b);
+      // The scouts have crashed! Filter living peers of this moving group
+      const survivingIds = observation.coLocatedRobotIds
+        .filter((id) => state.groupIds?.includes(id))
+        .sort((a, b) => a - b);
 
-      if (survivingIds.length === 1) {
+      if (survivingIds.length <= 1) {
         return this.stay({
           phase: "singleton",
           status: "settled-singleton",

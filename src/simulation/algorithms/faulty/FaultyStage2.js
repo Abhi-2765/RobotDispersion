@@ -45,6 +45,7 @@ export class FaultyStage2 {
           targetId: state.minimumId,
           firstPort: state.targetPort,
           distance: state.targetDistance,
+          occupiedCornerSteps: state.occupiedCornerSteps ?? [],
         };
       }
     }
@@ -146,6 +147,7 @@ export class FaultyStage2 {
     const targetMsg = inbox.find((m) => m.payload?.type === "faulty-stage2-target");
     if (targetMsg) {
       const distance = targetMsg.payload.distance;
+      const occupiedCornerSteps = targetMsg.payload.occupiedCornerSteps ?? [];
       if (distance === 0) {
         return {
           action: { type: "stay" },
@@ -154,6 +156,7 @@ export class FaultyStage2 {
               ...state,
               phase: "arrived",
               targetId: targetMsg.payload.targetId,
+              occupiedCornerSteps,
             },
           },
         };
@@ -172,6 +175,7 @@ export class FaultyStage2 {
             ...state,
             phase: "travelling",
             targetId: targetMsg.payload.targetId,
+            occupiedCornerSteps,
             walker: started.state,
           },
         },
@@ -279,17 +283,26 @@ export class FaultyStage2 {
       state.steps += 1;
     }
 
-    // At each corner visited along the tour, check IDs
+    // At each corner visited along the tour, check IDs and stationary singleton corners
     if (result.edgeCompleted && observation.degree === 2) {
       const candidates = [...observation.coLocatedRobotIds];
+      let isSingleton = false;
       for (const msg of inbox) {
         if (msg.payload?.type === "faulty-stage2-corner-info") {
           if (Array.isArray(msg.payload.cornerRobotIds)) {
             candidates.push(...msg.payload.cornerRobotIds);
+            if (msg.payload.cornerRobotIds.length === 1) isSingleton = true;
           }
           if (Number.isInteger(msg.payload.minimumId)) {
             candidates.push(msg.payload.minimumId);
           }
+        }
+      }
+
+      if (state.steps > 0 && (observation.coLocatedRobotIds.length === 1 || isSingleton)) {
+        state.occupiedCornerSteps ??= [];
+        if (!state.occupiedCornerSteps.includes(state.steps)) {
+          state.occupiedCornerSteps.push(state.steps);
         }
       }
 
