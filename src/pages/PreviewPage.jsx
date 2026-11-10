@@ -76,7 +76,7 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate,
           actions={(
             <div className="flex gap-2" aria-label="Configuration preview actions">
               <button type="button" className={`${controlButtonClass} px-2`} onClick={regenerate}>Regenerate</button>
-              {algorithmMode === "nonFaulty" && <button type="button" className={`${primaryControlButtonClass} px-2`} onClick={onStart}>Simulate</button>}
+              <button type="button" className={`${primaryControlButtonClass} px-2`} onClick={onStart}>Simulate</button>
             </div>
           )}
         />
