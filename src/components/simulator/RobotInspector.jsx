@@ -9,6 +9,7 @@ export function RobotInspector({
   onMoveRobot,
   movingRobotId = null,
   onCancelMove,
+  onCrashRobot,
   mode = "simulator",
 }) {
   const robot = robots.find((item) => item.id === selectedRobotId) ?? null;
@@ -33,6 +34,17 @@ export function RobotInspector({
         <div className="flex justify-between gap-3"><span className="text-foreground-muted">Position</span><strong className="font-medium">{robot.currentNode ? coordinateFor(robot.currentNode.id, gridSize) : "Crashed"}</strong></div>
         <div className="flex justify-between gap-3"><span className="text-foreground-muted">Status</span><strong className="font-medium">{robot.alive ? "Alive" : "Crashed"}</strong></div>
         <div className="flex justify-between gap-3"><span className="text-foreground-muted">Role</span><strong className="font-medium">{robot.role ?? "Unassigned"}</strong></div>
+
+        {onCrashRobot && robot.alive ? (
+          <button
+            type="button"
+            className="w-full border border-danger/60 bg-danger/10 px-3 py-2 text-xs font-semibold text-danger transition-colors hover:bg-danger/20"
+            onClick={() => onCrashRobot(robot.id)}
+            title="Simulate permanent crash failure for this robot"
+          >
+            💥 Crash robot (Simulate fault)
+          </button>
+        ) : null}
 
         {onMoveRobot ? (movingRobotId === robot.id ? (
           <div className="flex items-center justify-between gap-2 border-l-2 border-primary bg-primary/5 p-2 text-primary">
