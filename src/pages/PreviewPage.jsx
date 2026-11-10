@@ -9,7 +9,7 @@ import {
 } from "../components/simulator/controlStyles.js";
 
 export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate, onStart }) {
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedNodeId, setSelectedNodeId] = useState(0);
   const [selectedRobotId, setSelectedRobotId] = useState(null);
   const [movingRobotId, setMovingRobotId] = useState(null);
   const nodes = simulation.grid.getAllNodes();
@@ -18,7 +18,7 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate,
     : nodes.find((node) => node.id === selectedNodeId) ?? null;
 
   function regenerate() {
-    setSelectedNodeId(null);
+    setSelectedNodeId(0);
     setSelectedRobotId(null);
     setMovingRobotId(null);
     onRegenerate();
@@ -73,6 +73,12 @@ export function PreviewPage({ simulation, gridSize, algorithmMode, onRegenerate,
           )}
           interactionHint={movingRobotId === null ? null : `Moving Robot ${movingRobotId}: choose a destination node.`}
           viewportReserve={14}
+          actions={(
+            <div className="flex gap-2" aria-label="Configuration preview actions">
+              <button type="button" className={`${controlButtonClass} px-2`} onClick={regenerate}>Regenerate</button>
+              {algorithmMode === "nonFaulty" && <button type="button" className={`${primaryControlButtonClass} px-2`} onClick={onStart}>Simulate</button>}
+            </div>
+          )}
         />
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2" aria-label="Configuration preview actions">

@@ -23,6 +23,7 @@ export default function App() {
   const [simulationVersion, setSimulationVersion] = useState(0);
   const [simulationSeed, setSimulationSeed] = useState(1);
   const [page, setPage] = useState("configuration");
+  const [isSimulatorFullscreen, setIsSimulatorFullscreen] = useState(false);
 
   function updateGridSize(nextSize) {
     setGridSize(nextSize);
@@ -55,12 +56,15 @@ export default function App() {
     ? { currentPage: "Configuration" }
     : page === "preview"
       ? { currentPage: "Configuration preview", onBack: () => setPage("configuration"), backLabel: "Back to configuration" }
-      : { currentPage: "Simulation", onBack: () => setPage("preview"), backLabel: "Back to configuration preview" };
+      : { currentPage: "Simulation", onBack: () => {
+        setIsSimulatorFullscreen(false);
+        setPage("preview");
+      }, backLabel: "Back to configuration preview" };
 
   return (
     <main className="min-h-screen bg-background px-3 py-5 font-sans text-foreground sm:px-5 sm:py-7 lg:px-8">
       <div className="w-full">
-        <Navbar title={APP_TITLE} {...pageNavigation} />
+        {!(page === "simulator" && isSimulatorFullscreen) ? <Navbar title={APP_TITLE} {...pageNavigation} /> : null}
 
         {page === "configuration" ? (
           <ConfigurationPage
@@ -87,6 +91,7 @@ export default function App() {
             gridSize={gridSize}
             algorithmMode={algorithmMode}
             onReset={resetSimulation}
+            onFullscreenChange={setIsSimulatorFullscreen}
           />
         )}
       </div>

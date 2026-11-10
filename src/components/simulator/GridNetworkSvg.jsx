@@ -18,6 +18,15 @@ const NODE_RADIUS = 20;
 const PORT_OFFSET = 18;
 const PORT_RADIUS = 7;
 
+// Port numbers describe fixed local sockets, not compass directions in the
+// underlying grid. The connection behind a socket is still arbitrary.
+const PORT_DIRECTIONS = [
+  { dx: 1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: -1 },
+];
+
 function positionFor(node, size) {
   return {
     x: PADDING + (node.id % size) * PITCH,
@@ -25,29 +34,39 @@ function positionFor(node, size) {
   };
 }
 
-function directionBetween(from, to, size) {
-  const fromRow = Math.floor(from.id / size);
-  const fromColumn = from.id % size;
-  const toRow = Math.floor(to.id / size);
-  const toColumn = to.id % size;
-  return { dx: Math.sign(toColumn - fromColumn), dy: Math.sign(toRow - fromRow) };
+function directionForPort(port) {
+  return PORT_DIRECTIONS[port - 1] ?? { dx: 0, dy: 0 };
 }
 
 function getEdges(nodes, size) {
   const edges = [];
 
   for (const node of nodes) {
-    for (const [, neighbour] of node.getNeighbours()) {
+    for (const [port, neighbour] of node.getNeighbours()) {
       if (node.id > neighbour.id) continue;
+
+      const incomingPort = neighbour.getNeighbours()
+        .find(([, adjacentNode]) => adjacentNode === node)?.[0];
+      if (incomingPort === undefined) continue;
+
       const start = positionFor(node, size);
       const end = positionFor(neighbour, size);
-      const { dx, dy } = directionBetween(node, neighbour, size);
+      const outgoingDirection = directionForPort(port);
+      const incomingDirection = directionForPort(incomingPort);
+      const x1 = start.x + outgoingDirection.dx * PORT_OFFSET;
+      const y1 = start.y + outgoingDirection.dy * PORT_OFFSET;
+      const x2 = end.x + incomingDirection.dx * PORT_OFFSET;
+      const y2 = end.y + incomingDirection.dy * PORT_OFFSET;
+      // Keep the wires visibly curved without letting long links form large,
+      // confusing loops across the whole drawing.
+      const controlDistance = Math.min(
+        PITCH * 1.1,
+        Math.max(PITCH * 0.34, Math.hypot(x2 - x1, y2 - y1) * 0.28)
+      );
+
       edges.push({
         key: `${node.id}-${neighbour.id}`,
-        x1: start.x + dx * PORT_OFFSET,
-        y1: start.y + dy * PORT_OFFSET,
-        x2: end.x - dx * PORT_OFFSET,
-        y2: end.y - dy * PORT_OFFSET,
+        path: `M ${x1} ${y1} C ${x1 + outgoingDirection.dx * controlDistance} ${y1 + outgoingDirection.dy * controlDistance}, ${x2 + incomingDirection.dx * controlDistance} ${y2 + incomingDirection.dy * controlDistance}, ${x2} ${y2}`,
       });
     }
   }
@@ -67,39 +86,47 @@ function RobotMark({
   
   // Positions for placing more than one robot in the grid node
   const clusterPositions = [
-    { x: -7, y: -8 }, { x: 0, y: -10 }, { x: 7, y: -8 },
-    { x: -10, y: -1 }, { x: -3, y: -2 }, { x: 4, y: -2 }, { x: 10, y: -1 },
-    { x: -7, y: 6 }, { x: 0, y: 5 }, { x: 7, y: 6 },
+    { x: -7, y: -3 }, { x: 0, y: -4 }, { x: 7, y: -3 },
+    { x: -10, y: 4 }, { x: -3, y: 3 }, { x: 4, y: 3 }, { x: 10, y: 4 },
   ];
   
   if (robots.length === 0) return <circle className="fill-[var(--grid-empty)]" r="2.5" />;
   else if (robots.length === 1) {
     const robot = robots[0];
     const color = ROBOT_COLORS[(robot.id - 1) % ROBOT_COLORS.length];
-    return <circle
-      className={`${ROBOT_DOT_CLASSES[color]} cursor-pointer stroke-[var(--surface)] transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2.5]" : "stroke-1"}`}
-      r="6"
+    const selectRobot = (event) => {
+      event.stopPropagation();
+      if (isMovingRobot) onSelectNode?.(nodeId);
+      else onSelectRobot?.(robot.id);
+    };
+
+    return <g
+      className="cursor-pointer outline-none"
       role="button"
       tabIndex="0"
       aria-label={isMovingRobot
         ? `Move Robot ${robot.id} to ${coordinateFor(nodeId, gridSize)}`
         : `Select robot ${robot.id}`}
       aria-pressed={selectedRobotId === robot.id}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (isMovingRobot) onSelectNode?.(nodeId);
-        else onSelectRobot?.(robot.id);
-      }}
+      onClick={selectRobot}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          event.stopPropagation();
-          if (isMovingRobot) onSelectNode?.(nodeId);
-          else onSelectRobot?.(robot.id);
+          selectRobot(event);
         }
       }}
-    ><title>{`Robot ${robot.id}`}</title></circle>;
+    >
+      <circle className={`${ROBOT_DOT_CLASSES[color]} stroke-white transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2.5]" : "stroke-2"}`} r="10" />
+      <text className="pointer-events-none fill-white text-[7px] font-bold" textAnchor="middle" dominantBaseline="central">{robot.id}</text>
+      <title>{`Robot ${robot.id}`}</title>
+    </g>;
   }
+
+  const robotIds = robots.map((robot) => robot.id);
+  const minRobotId = Math.min(...robotIds);
+  const maxRobotId = Math.max(...robotIds);
+  const rangeLabel = `min ${minRobotId} · max ${maxRobotId}`;
+  const rangeWidth = Math.max(30, rangeLabel.length * 3.3 + 3);
 
   return <g>
     {robots.slice(0, clusterPositions.length).map((robot, index) => {
@@ -107,7 +134,7 @@ function RobotMark({
       const color = ROBOT_COLORS[(robot.id - 1) % ROBOT_COLORS.length];
       return <circle
         key={robot.id}
-        className={`${ROBOT_DOT_CLASSES[color]} cursor-pointer stroke-[var(--surface)] transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2]" : "stroke-1"}`}
+        className={`${ROBOT_DOT_CLASSES[color]} cursor-pointer stroke-white transition-all ${selectedRobotId === robot.id ? "stroke-[var(--grid-strong)] stroke-[2]" : "stroke-1.5"}`}
         cx={position.x}
         cy={position.y}
         r={selectedRobotId === robot.id ? "4.5" : "3.8"}
@@ -132,17 +159,29 @@ function RobotMark({
         }}
       ><title>{`Robot ${robot.id}`}</title></circle>;
     })}
-    <text className="fill-[var(--grid-strong)] stroke-[var(--surface)] text-[8px] font-bold [paint-order:stroke] [stroke-width:2.5px]" x="0" y="14" textAnchor="middle" dominantBaseline="central">×{robots.length}</text>
+    <rect className="fill-white stroke-[var(--grid-node-stroke)]" x={-rangeWidth / 2} y="-19" width={rangeWidth} height="10" rx="5" />
+    <text className="pointer-events-none fill-[var(--grid-strong)] text-[5px] font-bold" x="0" y="-14" textAnchor="middle" dominantBaseline="central">{rangeLabel}</text>
+    <text className="pointer-events-none fill-[var(--grid-strong)] stroke-white text-[8px] font-bold [paint-order:stroke] [stroke-width:2.5px]" x="0" y="14" textAnchor="middle" dominantBaseline="central">×{robots.length}</text>
   </g>;
 }
 
 function PortBump({ port, dx, dy }) {
-  const x = dx * PORT_OFFSET;
-  const y = dy * PORT_OFFSET;
+  const path = dx === 1
+    ? `M ${NODE_RADIUS} -${PORT_RADIUS} Q ${NODE_RADIUS + PORT_RADIUS * 2} 0 ${NODE_RADIUS} ${PORT_RADIUS} Z`
+    : dx === -1
+      ? `M -${NODE_RADIUS} ${PORT_RADIUS} Q -${NODE_RADIUS + PORT_RADIUS * 2} 0 -${NODE_RADIUS} -${PORT_RADIUS} Z`
+      : dy === 1
+        ? `M ${PORT_RADIUS} ${NODE_RADIUS} Q 0 ${NODE_RADIUS + PORT_RADIUS * 2} -${PORT_RADIUS} ${NODE_RADIUS} Z`
+        : `M -${PORT_RADIUS} -${NODE_RADIUS} Q 0 -${NODE_RADIUS + PORT_RADIUS * 2} ${PORT_RADIUS} -${NODE_RADIUS} Z`;
+  // The visual center of a semicircle sits closer to its flat edge than its
+  // bounding-box center. Keeping the label there gives it more room.
+  const labelOffset = NODE_RADIUS + PORT_RADIUS * 0.46;
+  const x = dx * labelOffset;
+  const y = dy * labelOffset;
 
   return <g>
-    <circle className="fill-[var(--grid-port)] stroke-[var(--surface)] stroke-[1.5] group-hover:fill-[var(--grid-port-hover)]" cx={x} cy={y} r={PORT_RADIUS} />
-    <text className="pointer-events-none fill-[var(--grid-strong)] text-[8px] font-bold" x={x} y={y} textAnchor="middle" dominantBaseline="central">{port}</text>
+    <path className="fill-[var(--grid-port)] stroke-[var(--grid-node-stroke)] stroke-[1.25] group-hover:fill-[var(--grid-port-hover)]" d={path} />
+    <text className="pointer-events-none fill-[var(--grid-strong)] text-[6px] font-bold" x={x} y={y} textAnchor="middle" dominantBaseline="central">{port}</text>
   </g>;
 }
 
@@ -155,6 +194,7 @@ export function GridNetworkSvg({
   isMovingRobot,
   onSelectNode,
   viewportReserve = 16,
+  isFullscreen = false,
 }) {
   const dimension = PADDING * 2 + (gridSize - 1) * PITCH;
   const preferredWidth = dimension * 1.6;
@@ -162,11 +202,14 @@ export function GridNetworkSvg({
   const edges = getEdges(nodes, gridSize);
 
   return (
-    <div className="overflow-auto p-1">
+    <div className={`overflow-auto ${isFullscreen ? "p-0" : "p-1"}`}>
       <svg
         className="mx-auto block h-auto w-full select-none"
         style={{
-          width: `min(100%, ${preferredWidth}px, ${availableViewport})`,
+          width: isFullscreen
+            ? `min(100%, ${availableViewport})`
+            : `min(100%, ${preferredWidth}px, ${availableViewport})`,
+          height: isFullscreen ? availableViewport : undefined,
           maxHeight: `min(90vh, ${availableViewport})`,
           maxWidth: `min(90vh, ${availableViewport})`,
         }}
@@ -180,7 +223,7 @@ export function GridNetworkSvg({
         </g>
 
         <g aria-hidden="true">
-          {edges.map((edge) => <line key={edge.key} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} className="stroke-[var(--grid-edge)] stroke-2 [stroke-linecap:round]" />)}
+          {edges.map((edge) => <path key={edge.key} d={edge.path} fill="none" className="stroke-[var(--grid-edge)] stroke-2 [stroke-linecap:round]" />)}
         </g>
 
         {nodes.map((node) => {
@@ -213,8 +256,8 @@ export function GridNetworkSvg({
                 }
               }}
             />
-            {node.getNeighbours().map(([port, neighbour]) => {
-              const { dx, dy } = directionBetween(node, neighbour, gridSize);
+            {node.getNeighbours().map(([port]) => {
+              const { dx, dy } = directionForPort(port);
               return <PortBump key={port} port={port} dx={dx} dy={dy} />;
             })}
             <RobotMark
