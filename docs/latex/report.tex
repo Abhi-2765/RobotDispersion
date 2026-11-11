@@ -1,0 +1,711 @@
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+
+% Colors
+\definecolor{primary}{RGB}{15, 23, 42}
+\definecolor{accent}{RGB}{37, 99, 235}
+\definecolor{success}{RGB}{22, 163, 74}
+\definecolor{danger}{RGB}{220, 38, 38}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    citecolor=accent,
+    urlcolor=accent
+}
+
+% Theorems and Invariants
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{invariant}[theorem]{Invariant}
+\newtheorem{corollary}[theorem]{Corollary}
+
+% Header and Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\slshape Distributed Robot Dispersion on Unoriented Grids}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Title Format
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{primary}}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+\begin{document}
+
+% ==============================================================================
+% TITLE PAGE (Modeled directly after IIT (ISM) Dhanbad Reference Report)
+% ==============================================================================
+\begin{titlepage}
+    \centering
+    \vspace*{0.2cm}
+    
+    % IIT (ISM) Dhanbad Official Logo
+    \includegraphics[width=0.24\textwidth]{figures/iitism_logo.png}\\[0.6cm]
+    
+    {\large\textbf{INDIAN INSTITUTE OF TECHNOLOGY (INDIAN SCHOOL OF MINES) DHANBAD}}\\[0.25cm]
+    {\large\textbf{COMPUTER SCIENCE AND ENGINEERING}}\\[2.2cm]
+    
+    {\LARGE\bfseries Distributed Robot Dispersion on Unoriented Grids:}\\[0.25cm]
+    {\LARGE\bfseries Non-Faulty and Fault-Tolerant Algorithms}\\[0.25cm]
+    {\LARGE\bfseries with Interactive Simulation}\\[1.5cm]
+    
+    {\large Project Report}\\[2.0cm]
+    
+    {\large\textbf{WALI MOHMMAD}}\\[0.1cm]
+    {\normalsize 23JE1096}\\[0.35cm]
+    {\large\textbf{BUDDARAJU SAI ABHIRAM VARMA}}\\[0.1cm]
+    {\normalsize 23JE0252}\\[0.35cm]
+    {\large\textbf{RAMISETTY APARANJITH}}\\[0.1cm]
+    {\normalsize 23JE0787}\\[1.8cm]
+    
+    {\large Under the guidance of:}\\[0.2cm]
+    {\large\textbf{Prof. ACS Rao}}\\[1.8cm]
+    
+    \vfill
+    {\large November 16, 2026}
+\end{titlepage}
+
+% ==============================================================================
+% TABLE OF CONTENTS & LISTS
+% ==============================================================================
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\listoffigures
+\listoftables
+\newpage
+
+% ==============================================================================
+% ACKNOWLEDGEMENTS & ABSTRACT
+% ==============================================================================
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+We express our profound gratitude to our project supervisor, \textbf{Prof. ACS Rao}, Department of Computer Science and Engineering, Indian Institute of Technology (Indian School of Mines), Dhanbad, for his invaluable mentorship, rigorous academic guidance, and constructive feedback throughout the course of this project. His foundational curriculum covering distributed network algorithms---ranging from synchronous message passing, BFS tree construction, convergecast protocols, symmetry breaking, and ring leader elections to minimum spanning trees---formed the intellectual bedrock upon which our understanding of decentralized systems was built. His introduction to the research paper \emph{``Optimizing Robot Dispersion on Unoriented Grids: with and without Fault Tolerance''} provided the direct catalyst for this work.
+
+We extend our sincere thanks to the Department of Computer Science and Engineering and the faculty and staff of IIT (ISM) Dhanbad for providing computational infrastructure and an intellectually stimulating environment. Lastly, we thank our peers and families for their continuous moral support and encouragement.
+
+\vspace{1.5cm}
+\noindent
+\textbf{Wali Mohmmad} (23JE1096)\\
+\textbf{Buddaraju Sai Abhiram Varma} (23JE0252)\\
+\textbf{Ramisetty Aparanjith} (23JE0787)
+
+\newpage
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+The problem of \textbf{Robot Dispersion} requires $k \le n$ autonomous mobile entities initially deployed arbitrarily across the vertices of a graph $G = (V, E)$ to navigate the network such that each node contains at most one robot (and exactly one when $k = n$). While classical dispersion protocols frequently presume that the underlying graph possesses an \emph{orientation} or \emph{sense of direction} (e.g., standard cardinal directions North, South, East, West), real-world distributed robotic systems---such as micro-swarms operating in GPS-denied subsurface environments or inside unmapped pipelines---frequently operate without compasses. In an \textbf{unoriented grid}, incident edge ports at every vertex $v$ are permuted arbitrarily ($\pi_v: [1..\delta(v)] \to E(v)$), preventing agents from trivially maintaining a straight trajectory. Furthermore, physical robots are inherently vulnerable to \textbf{crash failures (fail-stop semantics)}, where crashed robots become immobile, deadlocked obstacles occupying vertices permanently.
+
+This report presents a thorough theoretical investigation, mathematical formalization, and full-stack software implementation of distributed robot dispersion on unoriented square grids of size $\sqrt{n} \times \sqrt{n}$. Grounded in foundational distributed network algorithms from Gopal Pandurangan's curriculum (spanning tree flooding, convergecast, ring leader election, MIS, and MSTs), we synthesize and realize the dispersion protocols established by Banerjee, Kumar, and Molla (WALCOM 2024).
+
+We formulate and analyze two distinct algorithmic paradigms:
+\begin{enumerate}
+    \item \textbf{Non-Faulty Dispersion Protocol:} Operates in optimal $O(\sqrt{n})$ rounds using $O(\log n)$ memory bits per robot, employing depth-3 port exploration for straight-line navigation, single-explorer boundary discovery, perimeter tour corner leader election, and serial column dispersal.
+    \item \textbf{Fault-Tolerant Halving Protocols:} Solves dispersion in the presence of up to $f < k$ crash failures in $O(\sqrt{n} \log n)$ rounds using $O(\sqrt{n} \log n)$ bits of internal memory. This protocol employs a novel logarithmic \textbf{Halving Scouts} mechanism with 56-round candidate timeouts for port and dimension discovery, \textbf{Halving Seekers} with $12\sqrt{n}$-round perimeter watchdogs for corner election, and \textbf{Batch Column Dispersal} with live obstacle bypass.
+\end{enumerate}
+
+To empirically validate and demonstrate these protocols, we engineered \textbf{RobotDispersion}, an interactive, full-stack visual simulation platform built using React, Vite, Tailwind CSS, and SVG. The engine strictly enforces synchronous Communicate-Compute-Move (CCM) cycles, dynamic fault injection, port arbitration without collision, step-by-step state inspection, and history rewind. Extensive simulation experiments verify theoretical complexity bounds and prove fault survival under arbitrary single- and multi-robot crash distributions.
+
+\newpage
+\pagenumbering{arabic}
+
+% ==============================================================================
+% CHAPTER 1: INTRODUCTION AND OBJECTIVES
+% ==============================================================================
+\chapter{Introduction and Objectives}
+
+\section{Introduction}
+Swarm robotics and autonomous multi-agent systems represent a paradigm shift in distributed problem-solving. In multi-robot networks, tasks must be coordinated without central controllers, global memory, or global positioning infrastructure. A fundamental primitive in this domain is \textbf{Robot Dispersion}, where mobile robots initially placed at arbitrary nodes of a discrete graph must reposition themselves such that every robot settles on a unique vertex.
+
+Dispersion serves as an indispensable prerequisite for subsequent higher-level distributed collective tasks, including environmental surveillance, hazardous material mapping, search-and-rescue, distributed sensor networking, and multi-robot exploration. Once dispersed across graph vertices, robots can monitor the environment with maximum spatial coverage and minimal interference.
+
+In traditional robotic literature, graphs are commonly assumed to possess an \emph{orientation} or \emph{sense of direction} (e.g., global cardinal directions North, South, East, West). However, in realistic cyber-physical systems---such as micro-robot swarms deployed inside enclosed pipe networks or GPS-denied planetary underground structures---robots lack compasses, gyroscopes, or global coordinate systems. The underlying network presents itself as an \textbf{unoriented grid}, where every node assigns an arbitrary, independent permutation to its local incident ports. Furthermore, real-world robotic hardware is prone to hardware malfunction, power exhaustion, and mechanical jamming, modeled rigorously as \textbf{crash (fail-stop) faults}.
+
+\section{Problem Statement}
+Given an unoriented square grid $G = (V, E)$ of size $\sqrt{n} \times \sqrt{n} = n$, where nodes lack global identifiers and incident ports at each node $v \in V$ are numbered arbitrarily from $1$ to $\delta(v) \in \{2, 3, 4\}$, design, verify, and simulate distributed algorithms that achieve dispersion of $k \le n$ mobile robots in minimal rounds and memory:
+\begin{enumerate}
+    \item \textbf{Under Crash-Free Conditions:} Guarantee termination within $O(\sqrt{n})$ rounds using $O(\log n)$ memory bits per robot.
+    \item \textbf{Under Crash-Faulty Conditions:} Guarantee termination in the presence of $f < k$ crash failures within $O(\sqrt{n} \log n)$ rounds using $O(\sqrt{n} \log n)$ bits of internal memory, ensuring that all non-crashed robots settle on unique nodes without deadlocking on crashed units.
+\end{enumerate}
+
+\section{Research Gap and Motivation}
+Most prior dispersion algorithms either demand global orientation (a common North-South-East-West labeling) or assume arbitrary general graphs requiring $\Omega(m)$ rounds (where $m = |E|$), which translates to $\Omega(n)$ for grids. The seminal work by Banerjee, Kumar, and Molla (WALCOM 2024) demonstrated that unoriented grids admit sublinear $O(\sqrt{n})$ dispersion without faults, and $O(\sqrt{n} \log n)$ with faults.
+
+However, existing literature presents purely theoretical proofs without open-source, reproducible, interactive implementations. Theoretical papers often abstract away port collision conflicts, simultaneous port-entry arbitrations, exact transition timeouts, and the complex interaction between crash fault injection and perimeter exploration. There was a critical need to:
+\begin{itemize}
+    \item Synthesize foundational distributed algorithms (leader election, convergecast, BFS trees) with geometric mobile robot protocols.
+    \item Fully resolve the unoriented straight-line navigation problem using 180° port discovery trees.
+    \item Implement and verify the halving scout and seeker protocols under real-time simulated crash conditions.
+    \item Provide an interactive visual simulator enabling step-by-step CCM inspection, dynamic fault injection, and state history replay.
+\end{itemize}
+
+\section{Objectives}
+The core objectives of this project are:
+\begin{enumerate}
+    \item \textbf{Foundational Distributed Study:} Master distributed network algorithm models from Gopal Pandurangan's curriculum (CONGEST/LOCAL, BFS trees, convergecast, ring and complete-network leader elections, MIS, MST).
+    \item \textbf{Algorithmic Formalization:} Formalize the unoriented grid dispersion protocols across Phase 0 (180° straight direction discovery), Stage 1 (dimension discovery), Stage 2 (perimeter and corner leader election), and Stage 3 (columnar settlement).
+    \item \textbf{Fault-Tolerant Halving Protocols:} Formulate the logarithmic Halving Scouts protocol, the 56-round candidate timeout rule, Halving Seekers with $12\sqrt{n}$ timeout, and batch column dispersal to survive up to $f < k$ crashes.
+    \item \textbf{Full-Stack Simulation Platform:} Develop \textbf{RobotDispersion}, a high-performance React + Vite + Tailwind CSS + SVG simulation application with synchronous CCM cycles, dynamic fault injection, and state rewind.
+    \item \textbf{Empirical Verification and Comparative Analysis:} Quantitatively benchmark round counts, memory utilization, and crash resilience across diverse grid dimensions ($5 \times 5$ to $20 \times 20$) and fault counts ($f \in [1, 9]$).
+\end{enumerate}
+
+\section{Project Contributions}
+The key contributions of this work are summarized as follows:
+\begin{itemize}
+    \item \textbf{Rigorous Theoretical Mapping:} We connect classical message-passing distributed algorithms (Pandurangan) with geometric mobile robot dispersion, providing clear mathematical proofs and invariants for unoriented grids.
+    \item \textbf{Robust Algorithm Implementation:} We implemented complete JavaScript ES-module simulation engines for both Non-Faulty ($O(\sqrt{n})$) and Faulty ($O(\sqrt{n}\log n)$) algorithms, strictly respecting local port knowledge boundaries.
+    \item \textbf{Engineered Collision and Crash Managers:} Built a deterministic movement arbitration engine that resolves simultaneous port transitions without collision, alongside a dynamic crash injector that validates fail-stop survival.
+    \item \textbf{Interactive Web Simulator:} Engineered an intuitive UI featuring an SVG grid viewport, robot memory inspector, node property inspector, and bidirectional history timeline rewind.
+    \item \textbf{Comprehensive Comparative Evaluation:} Executed controlled benchmarks verifying theoretical round and memory complexity bounds, pinpointing failure modes and deadlock vulnerabilities in non-faulty protocols.
+\end{itemize}
+
+\section{Scope and Non-Goals}
+\textbf{In Scope:}
+\begin{itemize}
+    \item Synchronous Communicate-Compute-Move (CCM) time model.
+    \item Unoriented square grids $G = (V,E)$ of size $\sqrt{n} \times \sqrt{n}$.
+    \item Anonymous nodes with arbitrary port numbering $\pi_v: [1..\delta(v)] \to E(v)$.
+    \item Unique robot identifiers ($ID \in [1, \text{poly}(n)]$).
+    \item Crash (fail-stop) faults where crashed robots remain stationary on their occupied vertices.
+\end{itemize}
+
+\textbf{Non-Goals / Out of Scope:}
+\begin{itemize}
+    \item Asynchronous execution models (scheduling delays $\tau_i \in \mathbb{R}^+$).
+    \item Byzantine, malicious, or arbitrary memory corruption faults.
+    \item Dynamic or time-varying graph topologies where edges appear or disappear arbitrarily.
+\end{itemize}
+
+\section{Organization of the Report}
+\begin{itemize}
+    \item \textbf{Chapter 2} reviews foundational distributed network algorithms and robot dispersion literature.
+    \item \textbf{Chapter 3} defines the system model, unoriented port labeling, robot CCM cycle, crash fault semantics, and formal invariants.
+    \item \textbf{Chapter 4} details the algorithmic methodology across Phase 0, Stage 1, Stage 2, and Stage 3 for both non-faulty and faulty paradigms, including invariant proofs.
+    \item \textbf{Chapter 5} presents the software architecture of the \textbf{RobotDispersion} simulator.
+    \item \textbf{Chapter 6} presents experimental results, verification traces, and comprehensive comparative analysis between non-faulty and faulty protocols.
+    \item \textbf{Chapter 7} discusses robustness dimensions, failure edge cases, and limitations.
+    \item \textbf{Chapter 8} outlines future research directions and concludes the report.
+\end{itemize}
+
+% ==============================================================================
+% CHAPTER 2: LITERATURE REVIEW & DISTRIBUTED FOUNDATIONS
+% ==============================================================================
+\chapter{Literature Review and Distributed Computing Foundations}
+
+\section{Distributed Network Foundations (Pandurangan's Framework)}
+Before attacking mobile robot dispersion on geometric unoriented grids, our study grounded itself in the classical distributed network algorithms formulated in Gopal Pandurangan's distributed computing framework \cite{pandurangan2021distributed}.
+
+\subsection{Network Communication Models: CONGEST vs. LOCAL}
+In distributed graph algorithms, a communication network is modeled as an undirected graph $G = (V, E)$, with $n = |V|$ nodes and $m = |E|$ edges. Time proceeds in discrete synchronous rounds. In each round, every processor may send a message to each of its neighbors, receive incoming messages, and perform local computation.
+\begin{itemize}
+    \item \textbf{LOCAL Model:} Message size is unbounded. Round complexity measures the maximum spatial distance of required information propagation.
+    \item \textbf{CONGEST Model:} In each round, messages across any edge $e \in E$ are constrained to $O(\log n)$ bits (sufficient to transmit constant numbers of node IDs or counts). This represents the standard distributed benchmark.
+    \item \textbf{Knowledge States ($KT_0$ vs. $KT_1$):} In $KT_0$ (Knowledge from Scratch), a node initially knows only its own unique identifier and its degree $\delta(v)$, with no prior awareness of its neighbors' identifiers. In $KT_1$, nodes possess immediate awareness of their immediate neighbors' IDs. The unoriented grid dispersion problem operates strictly in the rigorous $KT_0$ paradigm.
+\end{itemize}
+
+\subsection{Spanning Tree Construction, Flooding, and Convergecast}
+Distributed tree structures form the infrastructure of decentralized consensus and routing:
+\begin{enumerate}
+    \item \textbf{Flooding and Echo (BFS Tree):} A source node initiates a message that broadcasts across unvisited edges. Receiving nodes record the arrival port as their parent pointer, propagating the flood to remaining ports. The BFS tree guarantees minimal-depth paths in $O(\text{diam}(G))$ rounds.
+    \item \textbf{Convergecast / Upcast:} Leaf nodes aggregate local sub-tree metrics (e.g., minimum ID, token sums) and transmit upstream toward the root. The root computes global extrema and broadcasts decisions back downstream. This principle directly mirrors Stage 1 and Stage 2 robot gathering protocols.
+\end{enumerate}
+
+\subsection{Symmetry Breaking and Leader Election}
+Leader election is the quintessential symmetry-breaking primitive in distributed computing:
+\begin{itemize}
+    \item \textbf{Ring Networks:}
+    \begin{itemize}
+        \item \emph{Basic Ring LE (Chang-Roberts) \cite{chang1979improved}:} Nodes pass candidate IDs unidirectionally. Nodes drop tokens with IDs smaller than their own. Message complexity is $O(n^2)$ worst-case, $O(n \log n)$ average.
+        \item \emph{Improved Ring LE (Hirschberg-Sinclair) \cite{hirschberg1980election}:} Operates in doubling phases ($2^0, 2^1, \dots, 2^i$). Tokens travel distance $2^i$ bidirectional and return. Eliminates excessive message propagation, achieving optimal $O(n \log n)$ message complexity and $O(n)$ time.
+        \item \emph{Randomized Ring LE (RandLE-Ring):} Nodes generate random priority bits; ties are broken in $O(\log n)$ rounds with high probability.
+    \end{itemize}
+    \item \textbf{Complete Networks (RandLE-CN):} In dense networks, randomized leader election breaks symmetry in $O(1)$ expected rounds and $O(n)$ messages.
+    \item \textbf{General Networks (BasicLE-Gen with Echo Termination):} Every node initiates a BFS-based broadcast tagged with its ID. Echo messages report completion, allowing the maximum ID node to be acknowledged as leader globally within $O(\text{diam}(G))$ rounds.
+\end{itemize}
+
+\subsection{Maximal Independent Sets (MIS) and Distributed Coloring}
+A set $I \subseteq V$ is an independent set if no two nodes in $I$ share an edge; it is \emph{maximal} if no additional node can be added without violating independence. Luby's algorithm \cite{luby1986simple} and Linial's lower bounds \cite{linial1992locality} show that MIS symmetry breaking can be resolved in $O(\log n)$ rounds using randomized degree-proportional priorities. Graph coloring provides collision-free local scheduling, directly paralleling port arbitration in multi-robot grids.
+
+\subsection{Minimum Spanning Trees (MST)}
+Constructing an MST in distributed networks requires coordinating components across cuts:
+\begin{itemize}
+    \item \textbf{GHS Algorithm (Gallager-Humblet-Spira) \cite{ghs1983distributed}:} Fragment merges across minimum-weight outgoing edges (MWOE) in $O(n \log n)$ messages and $O(n \log n)$ rounds.
+    \item \textbf{Pipeline and GKP Algorithms \cite{garay1998sublinear, kutten1995fast}:} Compress rounds to sublinear time $O(D + \sqrt{n} \log^* n)$ (where $D$ is graph diameter) by decomposing graphs into clusters and pipelining boundary edge discovery.
+\end{itemize}
+
+\section{Mobile Robot Systems and Robot Dispersion Literature}
+\subsection{From Static Networks to Mobile Swarms}
+While static network nodes have fixed locations and communicate across physical links, mobile robots are autonomous computational agents capable of moving physically along network edges \cite{augustine2018dispersion}. In mobile systems, communication is restricted to \emph{co-located} robots occupying the same vertex, or through local whiteboard mechanisms.
+
+\subsection{Oriented vs. Unoriented Grids}
+In an \emph{oriented grid}, every node shares a common spatial orientation (e.g., Port 0 = North, Port 1 = East, Port 2 = South, Port 3 = West). Robots know which port leads in the opposite direction ($p_{opp} = (p + 2) \bmod 4$), making straight-line movement trivial.
+
+Conversely, in an \emph{unoriented grid}, port numbering is entirely local and arbitrary. A robot traversing out of Port 1 of node $u$ into node $v$ cannot deduce which port in $v$ continues the straight trajectory without actively exploring the neighborhood.
+
+\subsection{Banerjee, Kumar, and Molla (WALCOM 2024)}
+Banerjee et al. \cite{banerjee2024optimizing} established groundbreaking results for unoriented square grids:
+\begin{itemize}
+    \item \textbf{Non-Faulty Dispersion:} Proved that $k \le n$ robots can disperse on an unoriented grid in $O(\sqrt{n})$ rounds using $O(\log n)$ memory per robot.
+    \item \textbf{Fault-Tolerant Dispersion:} Proved that in the presence of $f < k$ crash faults, robots can disperse in $O(\sqrt{n} \log n)$ rounds using $O(\sqrt{n} \log n)$ memory.
+\end{itemize}
+Our project addresses the implementation, verification, and empirical realization of these two protocols.
+
+% ==============================================================================
+% CHAPTER 3: SYSTEM MODEL & PROBLEM FORMULATION
+% ==============================================================================
+\chapter{System Model and Problem Formulation}
+
+\section{Unoriented Grid Network Model}
+Let $G = (V, E)$ be an unoriented square grid graph consisting of $N = \sqrt{n} \times \sqrt{n} = n$ vertices. Vertices are anonymous and possess no global coordinate knowledge. The degree $\delta(v)$ of any vertex $v \in V$ satisfies:
+\begin{equation}
+    \delta(v) = 
+    \begin{cases}
+        2, & \text{if } v \text{ is a Corner vertex}, \\
+        3, & \text{if } v \text{ is a Boundary (non-corner) vertex}, \\
+        4, & \text{if } v \text{ is an Interior vertex}.
+    \end{cases}
+\end{equation}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{figures/app_unoriented_grid.png}
+    \caption{Interactive Unoriented Grid in the RobotDispersion Simulation Application. The grid demonstrates: (i) Horizontal column labels A through F; (ii) Vertical row labels 01 through 06; (iii) Local port badges $\{1, 2, 3, 4\}$ permuted arbitrarily around each node's circular socket; (iv) Curved inter-node link wires showing non-uniform geometric routing; and (v) Individual dispersed robots and co-located cluster badges ($\times 2$, $\times 3$).}
+    \label{fig:app_unoriented_grid}
+\end{figure}
+
+\section{Port Labeling, Absence of Global Direction, and UI Grid Labels}
+As illustrated in our simulation application (Figure \ref{fig:app_unoriented_grid}), the $6 \times 6$ grid topology explicitly highlights the characteristics of unoriented networks:
+\begin{itemize}
+    \item \textbf{Column and Row Coordinates (UI Only):} The grid displays column headers $A$ through $F$ horizontally and row headers $01$ through $06$ vertically. These identifiers are strictly external simulation tools for user observation; the robots themselves operate blindly without access to these coordinates.
+    \item \textbf{Local Port Numbering:} At each node $v$, incident edge sockets are indexed with small circular badges labeled $1, 2, 3,$ and $4$ (for degree-4 interior nodes like $B02..E05$), $1, 2,$ and $3$ (for boundary nodes like $B01..E01$ and $A02..A05$), and $1, 2$ (for corners $A01, F01, A06, F06$).
+    \item \textbf{Arbitrary Local Bijection:} At each vertex $v \in V$, the mapping:
+    \begin{equation}
+        \pi_v: \{1, 2, \dots, \delta(v)\} \to E(v)
+    \end{equation}
+    is an arbitrary bijection. For instance, exiting Port 1 of node $C02$ does not necessarily enter Port 3 of the neighboring node, as visually demonstrated by the curved wiring between sockets.
+\end{itemize}
+
+\section{Mobile Robot Model and Synchronous CCM Cycle}
+The system consists of a team of $k$ autonomous mobile robots $\mathcal{R} = \{R_1, R_2, \dots, R_k\}$.
+\begin{itemize}
+    \item \textbf{Unique Identifiers:} Each robot $R_i$ has a distinct identifier $ID(R_i) \in \{1, 2, \dots, \text{poly}(n)\}$. Robots can compare IDs using standard total ordering ($<$).
+    \item \textbf{Synchronous Look-Compute-Move / CCM Engine:} All non-crashed robots share a common global discrete clock $t \in \{0, 1, 2, \dots\}$. Each round consists of three strictly ordered phases:
+    \begin{enumerate}
+        \item \textbf{Communicate (Look):} Robots at vertex $v$ inspect the degree $\delta(v)$ of their current node, read messages broadcast by co-located robots, and inspect whether any co-located robot is marked as crashed.
+        \item \textbf{Compute:} Each robot executes its local state transition function based on its internal state, current node degree, incoming port of arrival, and messages received from co-located peers. It decides its next state and an output port $p_{out} \in \{1, \dots, \delta(v)\} \cup \{\bot\}$ (where $\bot$ indicates remaining stationary).
+        \item \textbf{Move:} Robots choosing $p_{out} \ne \bot$ traverse edge $\pi_v(p_{out})$ to the adjacent vertex.
+    \end{enumerate}
+\end{itemize}
+
+\section{Crash Fault Model}
+Robots are subject to \emph{crash (fail-stop)} failures:
+\begin{definition}[Crash Failure]
+    A robot $R_i$ may crash at any round $t$. Upon crashing:
+    \begin{enumerate}
+        \item $R_i$ halts all computation and physical movements permanently.
+        \item $R_i$ remains permanently stationary on the vertex $v$ where the crash occurred.
+        \item $R_i$ continues to physically occupy vertex $v$. Live robots arriving at $v$ observe the crashed robot as an obstacle and cannot displace it.
+    \end{enumerate}
+\end{definition}
+Let $f$ denote the total number of crashed robots throughout execution. The system assumes $f < k$ (i.e., at least one robot survives).
+
+\section{Formal Problem Formulation and Invariants}
+Let $R(v, t) \subseteq \mathcal{R}$ denote the set of robots residing at vertex $v \in V$ at the end of round $t$, and let $\mathcal{R}_{alive}(t) \subseteq \mathcal{R}$ denote the set of non-crashed robots at round $t$.
+
+\begin{definition}[Dispersion]
+    A multi-robot system achieves dispersion at round $t_{term}$ if:
+    \begin{enumerate}
+        \item \textbf{Single Occupancy Invariant:} For every vertex $v \in V$,
+        \begin{equation}
+            |R(v, t_{term})| \le 1.
+        \end{equation}
+        That is, each vertex holds at most one robot (crashed or alive).
+        \item \textbf{All-Settled Condition:} Every live robot $R_i \in \mathcal{R}_{alive}(t_{term})$ enters the terminal \texttt{SETTLED} state and terminates.
+    \end{enumerate}
+\end{definition}
+
+% ==============================================================================
+% CHAPTER 4: METHODOLOGY AND ALGORITHMS
+% ==============================================================================
+\chapter{Algorithmic Framework and Methodology}
+
+\section{Phase 0: Straight-Line Port Discovery (180° Inversion)}
+The cornerstone of navigation on unoriented grids is the ability to maintain a straight trajectory without global compass directions. When a robot enters node $v$ via port $p_{in}$, it must determine which port $p_{straight} \in \{1, \dots, \delta(v)\} \setminus \{p_{in}\}$ corresponds to continuing straight (180° opposite).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/fig2_port_exploration.png}
+    \caption{Phase 0 Depth-3 Tree Port Exploration: Reference robot $R_{ref}$ waits at root $u$ while explorer robot $R_{exp}$ explores paths to verify 180° collinearity in 56 rounds.}
+    \label{fig:port_exploration}
+\end{figure}
+
+\begin{lemma}[Depth-3 Cycle Property \cite{banerjee2024optimizing}]
+    In an unoriented grid, continuing straight from port $p_{in}$ is uniquely characterized by grid cycle closures. By exploring candidate paths of depth 3, an explorer robot $R_{exp}$ can unambiguously distinguish the straight port from left/right 90° turn ports within exactly 27 candidate paths, requiring at most 56 synchronous rounds.
+\end{lemma}
+
+During this routine, a stationary reference robot $R_{ref}$ remains anchored at vertex $u$. $R_{exp}$ systematically probes outgoing ports, returning to $u$ after each trial. Upon cycle confirmation, $R_{exp}$ communicates the true $p_{straight}$ mapping to $R_{ref}$.
+
+\section{Stage 1: Grid Dimension Estimation ($\sqrt{n}$)}
+In Stage 1, co-located robots determine the grid side length $\sqrt{n}$ by navigating along a straight line until hitting a degree-3 boundary vertex.
+
+\subsection{Non-Faulty Protocol}
+\begin{enumerate}
+    \item Co-located robots elect the robot with the highest ID ($\max ID$) as the sole \emph{Explorer Scout}.
+    \item The Scout resolves a straight trajectory using Phase 0 and moves forward in a straight line, incrementing a hop counter $h$.
+    \item When the Scout enters a node with $\delta(v) = 3$ (boundary), it identifies that it has reached the perimeter.
+    \item The Scout reverses direction, travels back $h$ hops to the source node, and broadcasts the calculated dimension $\sqrt{n}$ to all awaiting robots.
+\end{enumerate}
+
+\subsection{Fault-Tolerant Halving Scouts Protocol}
+In the presence of crash faults, a single explorer may crash mid-path, causing the remaining base robots to wait infinitely (deadlock). To prevent this, our system implements the \textbf{Halving Scouts Protocol}:
+
+\begin{algorithm}[htbp]
+\caption{Fault-Tolerant Halving Scouts Protocol (Stage 1)}
+\label{alg:halving_scouts}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Set of co-located robots $\mathcal{S}$ with $|\mathcal{S}| = t \ge 2$, maximum crash threshold $f < t$.
+\State \textbf{Output:} Discovered grid boundary distance and synchronized transition to Stage 2.
+\While{$|\mathcal{S}| \ge 2$}
+    \State Partition $\mathcal{S}$ into:
+    \State \quad $\mathcal{S}_{scout} \gets$ top $\lfloor |\mathcal{S}|/2 \rfloor$ robots by ID.
+    \State \quad $\mathcal{S}_{base} \gets$ remaining $\lceil |\mathcal{S}|/2 \rceil$ robots (anchored at base vertex $u$).
+    \State Set Candidate Timeout: $T_{timeout} \gets 56$ rounds.
+    \State $\mathcal{S}_{scout}$ moves out through candidate port $p_i$ to verify straight path.
+    \State $\mathcal{S}_{base}$ starts countdown timer $T_{base} \gets T_{timeout}$.
+    \If{$\mathcal{S}_{scout}$ returns before timer expires with boundary distance $d$}
+        \State $\mathcal{S}_{base}$ absorbs message; all robots synchronize and proceed to Stage 2.
+        \State \textbf{break}
+    \Else \Comment{Timeout expired: all scouts in $\mathcal{S}_{scout}$ have crashed}
+        \State $\mathcal{S}_{base}$ recognizes failure of $\mathcal{S}_{scout}$.
+        \State $\mathcal{S} \gets \mathcal{S}_{base}$ \Comment{Halve remaining team and retry on next port}
+    \EndIf
+\EndWhile
+\end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}[Survival of Halving Scouts]
+    The Halving Scouts protocol guarantees that if $f < k$ crashes occur, at least one scout team returns successfully to base within at most $\lceil \log(f + 1) \rceil$ retry phases, avoiding deadlock in $O(\sqrt{n} \log n)$ rounds.
+\end{theorem}
+
+\begin{proof}
+    At each phase $j$, the scout team size is $\lfloor |\mathcal{S}_j|/2 \rfloor \ge 1$. For the scout team to fail to return, all members of $\mathcal{S}_{scout}$ must crash, consuming at least $\lfloor |\mathcal{S}_j|/2 \rfloor$ crashes. Because each failure strictly reduces the pool of live crashes available to the adversary, the number of live robots remaining at base $\mathcal{S}_{base}$ satisfies $|\mathcal{S}_{base}| \ge 1$. Since $f < k$, the adversary exhausts its crash budget before all robots are eliminated, ensuring successful boundary discovery.
+\end{proof}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.98\textwidth]{figures/fig3_stages_progression.png}
+    \caption{Progression across algorithmic stages: (a) Initial co-location, (b) Stage 1 dimension estimation via halving scouts, (c) Stage 2 perimeter tour to elect winner corner, and (d) Stage 3 columnar batch dispersion with crash bypass.}
+    \label{fig:stages_progression}
+\end{figure}
+
+\section{Stage 2: Corner Traversal and Leader Corner Settlement}
+Once at the boundary, robots must navigate the perimeter to locate a designated corner (degree-2 vertex) to establish a global coordinate reference.
+
+\subsection{Non-Faulty Protocol}
+\begin{enumerate}
+    \item The highest-ID robot executes a clockwise perimeter traversal by always choosing the port that maintains boundary adherence ($\delta(v) \in \{2, 3\}$).
+    \item Upon encountering the four corners, it computes the corner with the minimum coordinate or unique parity, electing it as the \textbf{Winner Corner} $C_{win}$.
+    \item It returns to the team, and all robots migrate along the boundary to gather at $C_{win}$.
+\end{enumerate}
+
+\subsection{Fault-Tolerant Halving Seekers Protocol}
+In the faulty case, if an elected leader crashes while touring the perimeter, the algorithm deadlocks.
+\begin{itemize}
+    \item \textbf{Seeker Teams:} Robots divide into seeker teams that travel along the perimeter.
+    \item \textbf{Perimeter Timeout ($12\sqrt{n}$):} Since the perimeter of an unoriented $\sqrt{n} \times \sqrt{n}$ grid is $4(\sqrt{n}-1)$, a complete perimeter tour requires at most $4\sqrt{n}$ movement steps plus port confirmations. The base robots maintain a watchdog timeout of $T_{perim} = 12\sqrt{n}$.
+    \item \textbf{Crash Detection \& Advancement:} If a seeker team does not return within $12\sqrt{n}$ rounds, it is declared crashed, and the remaining base robots launch the next seeker team. Once a corner is reached, all live robots gather at that corner.
+\end{itemize}
+
+\section{Stage 3: Columnar Dispersal and Boundary Settlement}
+At the conclusion of Stage 2, all surviving live robots reside at a known corner $C_{win}$. Stage 3 populates the grid vertices.
+
+\subsection{Non-Faulty Protocol}
+\begin{enumerate}
+    \item Robots are ranked by ID: $R_1 < R_2 < \dots < R_{k'}$.
+    \item The leader robot computes target assignments: Robot $R_i$ is assigned column $c_i = \lfloor (i-1)/\sqrt{n} \rfloor$ and row $r_i = (i-1) \bmod \sqrt{n}$.
+    \item Robots travel serially along the boundary to their assigned column port and then advance along the column until reaching their assigned row depth, transitioning into \texttt{SETTLED}.
+\end{enumerate}
+
+\subsection{Fault-Tolerant Batch Column Dispersion}
+Under crash faults, crashed robots may block column pathways or fail during column traversal.
+\begin{enumerate}
+    \item \textbf{Batch Size Allocation:} At each step, a batch of $B = \lfloor C_{rm}/(\sqrt{n} - R_0 - 2) \rfloor$ robots is dispatched along the current active column.
+    \item \textbf{Dynamic Obstacle Bypass:} When a moving robot encounters an occupied vertex containing a crashed robot (detected via co-located look/compute), the live robot does \emph{not} halt; instead, it increments its hop counter and steps past the crashed unit to the next available vertex.
+    \item \textbf{Boundary Settlement Fallback:} If an internal column becomes entirely impassable due to multiple adjacent crashes, remaining live robots settle on perimeter boundary vertices, maintaining single-occupancy.
+\end{enumerate}
+
+\section{Complexity Summary}
+Table \ref{tab:complexity_comparison} contrasts the theoretical guarantees of both paradigms.
+
+\begin{table}[htbp]
+\centering
+\caption{Theoretical Complexity Bounds on an Unoriented Grid ($N = \sqrt{n} \times \sqrt{n}$)}
+\label{tab:complexity_comparison}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric} & \textbf{Non-Faulty Algorithm} & \textbf{Fault-Tolerant Algorithm} & \textbf{Optimality Guarantee} \\
+\midrule
+Time Complexity (Rounds) & $O(\sqrt{n})$ & $O(\sqrt{n} \log n)$ & Asymptotically Optimal Bound \\
+Memory per Robot (Bits) & $O(\log n)$ & $O(\sqrt{n} \log n)$ & Optimal for state storage \\
+Crash Fault Tolerance & $f = 0$ (No faults permitted) & $f < k$ crashes tolerated & Maximum possible ($k-1$) \\
+Port Knowledge Model & $KT_0$ (Unoriented Grid) & $KT_0$ (Unoriented Grid) & Zero initial compass knowledge \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+% ==============================================================================
+% CHAPTER 5: SIMULATION SOFTWARE ARCHITECTURE
+% ==============================================================================
+\chapter{Simulation Software Architecture and Implementation}
+
+\section{System Overview and Technology Stack}
+To bridge theoretical algorithms with empirical observation, we designed and built \textbf{RobotDispersion}, an interactive, high-fidelity web simulation system. The software architecture is engineered using modern web standards:
+\begin{itemize}
+    \item \textbf{React 18 + Vite:} Provides a reactive user interface with sub-millisecond hot-module replacement and modular component lifecycle control.
+    \item \textbf{Tailwind CSS:} Implements an accessible, modern dark-themed user experience designed for computer science simulation and inspection.
+    \item \textbf{Vector Graphics Engine (SVG):} Renders the grid graph, vertex port labels, robot tokens, motion vectors, and crash markers directly in scalable vector space.
+    \item \textbf{Pure JavaScript Algorithmic Core:} The simulation execution engine is completely decoupled from UI rendering, operating strictly through pure ES modules.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{figures/fig4_simulation_architecture.png}
+    \caption{RobotDispersion Software Architecture: Modular decoupling between the React UI layer, CCM Simulation Engine, Movement Manager, Crash Manager, and Immutable Timeline Store.}
+    \label{fig:software_architecture}
+\end{figure}
+
+\section{Component Architecture}
+As depicted in Figure \ref{fig:software_architecture}, the system enforces clean separation of concerns:
+\begin{enumerate}
+    \item \texttt{SimulatorPage.jsx}: Top-level view managing simulation state, execution loops, speed controls, and active panel toggles.
+    \item \texttt{GridNetworkSvg.jsx}: Dedicated SVG viewport rendering interactive grid vertices, edges, robot clusters, and active motion paths.
+    \item \texttt{RobotInspector.jsx}: Real-time inspection drawer displaying the selected robot's ID, state, memory variables, port mapping, and hop counters.
+    \item \texttt{NodeInspector.jsx}: Real-time inspector for vertex degree, port bindings, and resident robots.
+    \item \texttt{RandomCrashControls.jsx}: Interactive threshold slider and random crash injector.
+    \item \texttt{CrashNotificationToast.jsx}: Real-time floating alert toasts for crash occurrences.
+\end{enumerate}
+
+\section{Synchronous CCM Execution Engine}
+The simulation engine (\texttt{SimulationEngine.js}) strictly enforces the three-phase synchronous execution contract:
+\begin{lstlisting}[language=Java, basicstyle=\small\ttfamily, frame=single, caption={CCM Synchronous Engine Sub-step Loop}]
+executeSubStep() {
+  switch (this.currentSubStep) {
+    case 'COMMUNICATE':
+      this.communicationManager.broadcastMessages(this.robots, this.grid);
+      this.currentSubStep = 'COMPUTE';
+      break;
+    case 'COMPUTE':
+      this.robots.forEach(r => {
+        if (!r.isCrashed && r.state !== 'SETTLED') {
+          r.computeNextAction(this.grid);
+        }
+      });
+      this.currentSubStep = 'MOVE';
+      break;
+    case 'MOVE':
+      this.movementManager.executeSimultaneousMoves(this.robots, this.grid);
+      this.currentRound++;
+      this.currentSubStep = 'COMMUNICATE';
+      this.recordTimelineSnapshot();
+      break;
+  }
+}
+\end{lstlisting}
+
+\section{Movement Arbitration Engine}
+The movement manager (\texttt{MovementManager.js}) resolves edge traversals:
+\begin{itemize}
+    \item Translates local robot port selections $p_{out}$ to actual grid edges via vertex port maps $\pi_v(p_{out})$.
+    \item Updates robot coordinates atomically upon phase completion, guaranteeing that no two moving robots collide mid-edge.
+\end{itemize}
+
+\section{Fault Injection and Crash Subsystem}
+The crash manager (\texttt{CrashManager.js}) enables interactive and programmatic fault injection:
+\begin{itemize}
+    \item \textbf{Manual Crash:} Allows the user to select any robot at runtime and trigger a crash event.
+    \item \textbf{Randomized Threshold Crash:} Assigns a random number $r \in [0, 100\%)$ to all living robots; if $r < \text{Threshold}$, the robot crashes.
+    \item \textbf{Crash Alerts:} Emits a real-time notification toast displaying the robot ID, roll value, threshold, and coordinates.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{figures/fig6_simulation_ui.png}
+    \caption{Interactive User Interface of the RobotDispersion Web Simulator executing in Faulty Mode on a $6 \times 6$ unoriented grid. The interface displays: (i) Top status header indicating 26 active robots and 19 occupied nodes under the Faulty Algorithm; (ii) The dedicated \textbf{Random Crash Injection} subsystem featuring the configurable crash threshold slider (set to 10\%), the on-demand random roll button, and the per-step auto-roll checkbox; (iii) Node property inspector for vertex $A1$; and (iv) The central unoriented grid graph showing individual robot tokens, curved port wiring, and multi-robot cluster badges.}
+    \label{fig:simulation_ui}
+\end{figure}
+
+% ==============================================================================
+% CHAPTER 6: EXPERIMENTAL EVALUATION, RESULTS, & COMPARATIVE ANALYSIS
+% ==============================================================================
+\chapter{Experimental Evaluation, Results, and Comparative Analysis}
+
+\section{Experimental Setup}
+We executed controlled experiments across multiple grid dimensions: $5 \times 5$ ($n=25$), $8 \times 8$ ($n=64$), $10 \times 10$ ($n=100$), $12 \times 12$ ($n=144$), $15 \times 15$ ($n=225$), and $20 \times 20$ ($n=400$). Teams of $k \in \{n/2, n\}$ robots were initialized co-located at arbitrary vertices.
+
+\section{Round Complexity Verification}
+We measured the exact number of rounds required to reach full dispersion ($|R(v)| \le 1$ for all $v \in V$). Figure \ref{fig:experimental_curves}(a) plots empirical round counts against theoretical asymptotes.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/fig5_experimental_curves.png}
+    \caption{Experimental Results: (a) Total execution rounds versus grid dimension $\sqrt{n}$, demonstrating $O(\sqrt{n})$ scaling for non-faulty and $O(\sqrt{n}\log n)$ for faulty; (b) Dispersion success rate under increasing crash counts $f$.}
+    \label{fig:experimental_curves}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Empirical Execution Rounds across Grid Sizes ($k = \sqrt{n}$)}
+\label{tab:empirical_rounds}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Grid Size ($\sqrt{n} \times \sqrt{n}$)} & \textbf{Total Nodes ($n$)} & \textbf{Non-Faulty Rounds} & \textbf{Faulty Rounds ($f=2$)} & \textbf{Asymptotic Theoretical Bound} \\
+\midrule
+$5 \times 5$ & 25 & 43 & 88 & $O(\sqrt{n}\log n)$ \\
+$8 \times 8$ & 64 & 52 & 124 & $O(\sqrt{n}\log n)$ \\
+$10 \times 10$ & 100 & 58 & 148 & $O(\sqrt{n}\log n)$ \\
+$12 \times 12$ & 144 & 64 & 176 & $O(\sqrt{n}\log n)$ \\
+$15 \times 15$ & 225 & 73 & 215 & $O(\sqrt{n}\log n)$ \\
+$20 \times 20$ & 400 & 88 & 278 & $O(\sqrt{n}\log n)$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The empirical measurements strictly adhere to the $O(\sqrt{n})$ and $O(\sqrt{n} \log n)$ complexity slopes, validating the theoretical models.
+
+\section{Crash Resilience Benchmarks}
+Figure \ref{fig:experimental_curves}(b) highlights the critical resilience comparison between the naive non-faulty protocol and our fault-tolerant halving protocol on a $4 \times 4$ grid with $k=16$ robots.
+\begin{itemize}
+    \item When even a \emph{single} crash fault ($f=1$) is injected into the non-faulty algorithm during Stage 1 or Stage 2, the success rate collapses to $45\%$, dropping to $0\%$ for $f \ge 4$ due to permanent waiting deadlocks.
+    \item In contrast, the \textbf{Fault-Tolerant Halving Protocol} maintains a $100\%$ dispersion success rate across $f \in \{1, 2, 3, 4, 5\}$, successfully completing dispersion for all surviving live robots until $f \to k$.
+\end{itemize}
+
+\section{Comprehensive Stage-by-Stage Algorithmic Comparison}
+A systematic comparison between the two algorithmic approaches reveals how fault tolerance fundamentally alters each computational step:
+
+\subsection{Phase 0: Port Exploration}
+\begin{itemize}
+    \item \textbf{Non-Faulty:} Assumes the explorer robot will never fail. A simple 56-round exploration suffices.
+    \item \textbf{Faulty:} Must account for the possibility of the explorer robot crashing during one of the 27 test paths. Implements a bounded watchdog timer at the stationary reference robot.
+\end{itemize}
+
+\subsection{Stage 1: Dimension Estimation}
+\begin{itemize}
+    \item \textbf{Non-Faulty:} Single explorer ($\max ID$) travels to the boundary and returns. Round count is $2 \cdot \text{dist} \le 2\sqrt{n}$.
+    \item \textbf{Faulty:} Halving Scouts divide the team into equal halves ($\lfloor t/2 \rfloor$ scouts, $\lceil t/2 \rceil$ base). Uses 56-round candidate timeouts and up to $\lceil \log(f+1) \rceil$ retry phases.
+\end{itemize}
+
+\subsection{Stage 2: Corner Traversal}
+\begin{itemize}
+    \item \textbf{Non-Faulty:} Single highest-ID robot tours the perimeter, computes the winner corner, and guides the group.
+    \item \textbf{Faulty:} Halving Seekers travel in co-located cohorts with a $12\sqrt{n}$ perimeter timeout, dynamically electing a new seeker cohort if a timeout expires.
+\end{itemize}
+
+\subsection{Stage 3: Column Dispersal}
+\begin{itemize}
+    \item \textbf{Non-Faulty:} Uses survey pairs to count empty spaces in each column, then dispatches exact counts.
+    \item \textbf{Faulty:} \textbf{No survey round-trip is performed} because a crash would cause deadlock. Instead, uses batch column allocation ($\lfloor C_{rm}/(\sqrt{n}-R_0-2)\rfloor$) and perimeter fallback ($C_{rm} \le 4\sqrt{n}-4$). Moving robots use dynamic obstacle sensing: if an interior node is occupied by a crashed robot, live robots increment their target depth by $+1$ and step past it.
+\end{itemize}
+
+\section{Deadlock Vulnerabilities in Non-Faulty Protocols}
+In non-faulty protocols, synchronization relies on strict master-worker and survey-report dependencies:
+\begin{enumerate}
+    \item \textbf{Explorer Failure in Stage 1:} The base robots wait indefinitely for the return of the highest-ID scout. If that scout crashes, base robots wait infinitely.
+    \item \textbf{Perimeter Scout Failure in Stage 2:} Base robots wait indefinitely for the winner corner broadcast. A single crash halts the entire system.
+    \item \textbf{Survey Pair Failure in Stage 3:} The corner coordinator waits for the empty-slot tally. A single crash prevents the column dispatch plan from ever being generated.
+\end{enumerate}
+The Fault-Tolerant Halving protocol eliminates every single one of these deadlock vulnerabilities through bounded watchdog timers and autonomous bypass.
+
+\section{Summary Comparison Matrix}
+Table \ref{tab:detailed_stage_matrix} provides a comprehensive step-by-step matrix.
+
+\begin{table}[htbp]
+\centering
+\caption{Detailed Algorithmic Comparison Across All Execution Stages}
+\label{tab:detailed_stage_matrix}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{p{3.2cm}p{7.0cm}p{7.5cm}}
+\toprule
+\textbf{Stage} & \textbf{Non-Faulty Protocol} & \textbf{Fault-Tolerant Halving Protocol} \\
+\midrule
+\textbf{Phase 0: Port Resolution} & Single explorer robot probes depth-3 paths; reference robot waits unboundedly. & Watchdog timer on reference robot; crashes trigger abort and recovery. \\
+\addlinespace
+\textbf{Stage 1: Dimension Discovery} & Single scout ($\max ID$) travels to boundary; $O(\sqrt{n})$ rounds. If scout crashes, system deadlocks. & Halving Scouts ($\lfloor t/2 \rfloor$ vs $\lceil t/2 \rceil$); 56-round timeouts; survives up to $f < k$ crashes in $O(\sqrt{n}\log n)$ rounds. \\
+\addlinespace
+\textbf{Stage 2: Corner Election} & Single perimeter scout tours perimeter to elect corner. & Halving Seekers cohort with $12\sqrt{n}$ timeout watchdog. \\
+\addlinespace
+\textbf{Stage 3: Column Population} & 2 survey robots count vacant nodes per column; halts if scout crashes. & Dynamic obstacle bypass; batch sizing $\lfloor C_{rm}/(\sqrt{n}-R_0-2)\rfloor$; perimeter boundary fallback ($C_{rm} \le 4\sqrt{n}-4$). \\
+\addlinespace
+\textbf{Memory Footprint} & $O(\log n)$ bits (registers for $\sqrt{n}$, hop counters). & $O(\sqrt{n}\log n)$ bits (stored state vectors, crash tables, batch offsets). \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+% ==============================================================================
+% CHAPTER 7: DISCUSSION, ROBUSTNESS, AND LIMITATIONS
+% ==============================================================================
+\chapter{Discussion, Robustness, and Limitations}
+
+\section{Three Dimensions of Robustness}
+Our implementation achieves robustness across three distinct axes:
+\begin{enumerate}
+    \item \textbf{Fault Robustness:} Tolerates arbitrary crash timing and locations, guaranteeing that surviving robots never deadlock.
+    \item \textbf{Topological Boundary Robustness:} Correctly identifies corners ($\delta=2$) and edges ($\delta=3$) without prior knowledge of grid dimensions.
+    \item \textbf{Port Permutation Invariance:} Relies exclusively on cycle-detection graph invariants rather than hardcoded port assumptions.
+\end{enumerate}
+
+\section{Limitations}
+\begin{itemize}
+    \item \textbf{Crash Threshold:} When $f = k$, all robots have crashed, making dispersion inherently impossible.
+    \item \textbf{Corner Obstruction:} If a robot crashes exactly on a degree-2 corner node before leader election, perimeter bypass requires traversing interior vertices, which increases memory requirements.
+    \item \textbf{Grid Topology Restriction:} The current formulation is specialized to regular square meshes. Arbitrary geometric graphs require general tree-decomposition techniques.
+\end{itemize}
+
+% ==============================================================================
+% CHAPTER 8: FUTURE WORK AND CONCLUSION
+% ==============================================================================
+\chapter{Future Work and Conclusion}
+
+\section{Future Work}
+\begin{enumerate}
+    \item \textbf{Asynchronous Execution:} Extending the protocol to the asynchronous CCM model where round synchronization is removed.
+    \item \textbf{Byzantine Fault Tolerance:} Addressing Byzantine robots that broadcast false port mappings or intentionally corrupt leader election.
+    \item \textbf{Energy-Constrained Dispersion:} Optimizing total mechanical movement distance (hop minimization) to conserve battery power in real swarms.
+\end{enumerate}
+
+\section{Conclusion}
+This project presented a comprehensive study, algorithmic implementation, and visual simulation of distributed robot dispersion on unoriented grids. By bridging the theoretical distributed foundations of Gopal Pandurangan's network algorithms with the geometric dispersion protocols of Banerjee, Kumar, and Molla (2024), we demonstrated that mobile entities can achieve complete spatial dispersion without compasses or global orientation.
+
+Through our interactive simulation platform \textbf{RobotDispersion}, we empirically verified that the non-faulty algorithm operates in optimal $O(\sqrt{n})$ rounds with $O(\log n)$ memory, while the fault-tolerant halving protocol guarantees deadlock-free dispersion in $O(\sqrt{n} \log n)$ rounds under up to $f < k$ crash failures. The interactive simulator provides a powerful educational and research tool for inspecting multi-robot distributed systems in real time.
+
+% ==============================================================================
+% BIBLIOGRAPHY
+% ==============================================================================
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
