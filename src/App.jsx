@@ -3,6 +3,9 @@ import { createSimulation } from "./simulation/SimulationSetup.js";
 import { ConfigurationPage } from "./pages/ConfigurationPage.jsx";
 import { PreviewPage } from "./pages/PreviewPage.jsx";
 import { SimulatorPage } from "./pages/SimulatorPage.jsx";
+import { TutorialSelectionPage } from "./pages/TutorialSelectionPage.jsx";
+import { StraightPathTutorialPage } from "./pages/StraightPathTutorialPage.jsx";
+import { BoundaryTraversalTutorialPage } from "./pages/BoundaryTraversalTutorialPage.jsx";
 import { Navbar } from "./components/Navbar.jsx";
 
 const APP_TITLE = "Optimizing Robot Dispersion on Grids: with and without Fault Tolerance";
@@ -56,10 +59,16 @@ export default function App() {
     ? { currentPage: "Configuration" }
     : page === "preview"
       ? { currentPage: "Configuration preview", onBack: () => setPage("configuration"), backLabel: "Back to configuration" }
-      : { currentPage: "Simulation", onBack: () => {
-        setIsSimulatorFullscreen(false);
-        setPage("preview");
-      }, backLabel: "Back to configuration preview" };
+      : page === "tutorial-select"
+        ? { currentPage: "Interactive Tutorials", onBack: () => setPage("configuration"), backLabel: "Back to configuration" }
+        : page === "tutorial-straight-path"
+          ? { currentPage: "Straight-Path Discovery Tutorial", onBack: () => setPage("tutorial-select"), backLabel: "Back to tutorial selection" }
+          : page === "tutorial-boundary"
+            ? { currentPage: "Boundary Traversal Tutorial", onBack: () => setPage("tutorial-select"), backLabel: "Back to tutorial selection" }
+            : { currentPage: "Simulation", onBack: () => {
+              setIsSimulatorFullscreen(false);
+              setPage("preview");
+            }, backLabel: "Back to configuration preview" };
 
   return (
     <main className="min-h-screen bg-background px-3 py-5 font-sans text-foreground sm:px-5 sm:py-7 lg:px-8">
@@ -75,6 +84,7 @@ export default function App() {
             onRobotCountChange={setRobotCount}
             onAlgorithmModeChange={setAlgorithmMode}
             onPreview={createPreview}
+            onOpenTutorials={() => setPage("tutorial-select")}
           />
         ) : page === "preview" ? (
           <PreviewPage
@@ -83,6 +93,21 @@ export default function App() {
             algorithmMode={algorithmMode}
             onRegenerate={createPreview}
             onStart={() => setPage("simulator")}
+          />
+        ) : page === "tutorial-select" ? (
+          <TutorialSelectionPage
+            onSelectStraightPath={() => setPage("tutorial-straight-path")}
+            onSelectBoundary={() => setPage("tutorial-boundary")}
+          />
+        ) : page === "tutorial-straight-path" ? (
+          <StraightPathTutorialPage
+            gridSize={gridSize}
+            algorithmMode={algorithmMode}
+          />
+        ) : page === "tutorial-boundary" ? (
+          <BoundaryTraversalTutorialPage
+            gridSize={gridSize}
+            algorithmMode={algorithmMode}
           />
         ) : (
           <SimulatorPage
