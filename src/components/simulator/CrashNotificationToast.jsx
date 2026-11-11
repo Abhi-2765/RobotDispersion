@@ -43,3 +43,4 @@ export function CrashNotificationToast({ notifications, onDismiss }) {
     </aside>
   );
 }
+
