@@ -1,5 +1,6 @@
 import { CommunicationManager } from "./CommunicationManager.js";
 import { MovementManager } from "./MovementManager.js";
+import { CrashManager } from "./CrashManager.js";
 
 export class SimulationEngine {
   constructor(simulation, algorithm, options = {}) {
@@ -23,6 +24,7 @@ export class SimulationEngine {
 
     this.communicationManager = new CommunicationManager();
     this.movementManager = new MovementManager();
+    this.crashManager = new CrashManager();
   }
 
   setCrashProbability(probability) {
@@ -36,11 +38,18 @@ export class SimulationEngine {
     if (living.length <= 1) return [];
 
     for (const robot of living) {
-      // Keep at least 1 robot alive
+      // Keep at least 1 robot alive so dispersion invariant f < k holds
       if (this.simulation.robots.filter((r) => r.alive).length <= 1) break;
-      if (this.random() < this.crashProbability) {
-        robot.crash();
-        crashed.push(robot.id);
+      const roll = this.random();
+      if (roll < this.crashProbability) {
+        const nodeId = robot.currentNode?.id ?? null;
+        this.crashManager.crash(robot);
+        crashed.push({
+          id: robot.id,
+          roll: Number(roll.toFixed(3)),
+          threshold: Number(this.crashProbability.toFixed(3)),
+          nodeId,
+        });
       }
     }
     return crashed;
@@ -100,7 +109,8 @@ export class SimulationEngine {
     }
 
     try {
-    const crashedRobotIds = this.injectFaults();
+    const crashDetails = this.injectFaults();
+    const crashedRobotIds = crashDetails.map((c) => c.id);
 
     // Phase 1: Communicate
     const observations = this.getObservations();
@@ -146,6 +156,7 @@ export class SimulationEngine {
       round: nextRound,
       stageTransition,
       crashedRobotIds,
+      crashDetails,
       observations,
       inboxes,
       decisions,

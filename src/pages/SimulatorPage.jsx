@@ -5,6 +5,8 @@ import { NodeInspector } from "../components/simulator/NodeInspector.jsx";
 import { RobotInspector } from "../components/simulator/RobotInspector.jsx";
 import { SimulationControls } from "../components/simulator/SimulationControls.jsx";
 import { StageProgress } from "../components/simulator/StageProgress.jsx";
+import { RandomCrashControls } from "../components/simulator/RandomCrashControls.jsx";
+import { CrashNotificationToast } from "../components/simulator/CrashNotificationToast.jsx";
 import { coordinateFor } from "../components/simulator/gridPresentation.js";
 import { SimulationEngine } from "../simulation/engine/SimulationEngine.js";
 import { NonFaultyAlgorithm } from "../simulation/algorithms/nonFaulty/NonFaultyAlgorithm.js";
@@ -20,7 +22,19 @@ function describeStep(result, previousStage, nextStage) {
     0
   );
 
-  if (result.crashedRobotIds?.length > 0) {
+  if (result.crashDetails?.length > 0) {
+    for (const crash of result.crashDetails) {
+      const rollText = crash.roll !== undefined
+        ? ` (Roll: ${(crash.roll * 100).toFixed(1)}% < Threshold: ${(crash.threshold * 100).toFixed(1)}%)`
+        : "";
+      events.push({
+        id: `${result.round}-crash-${crash.id}`,
+        round: result.round,
+        text: `Robot ${crash.id} suffered a crash fault!${rollText}`,
+        kind: "fault",
+      });
+    }
+  } else if (result.crashedRobotIds?.length > 0) {
     for (const crashedId of result.crashedRobotIds) {
       events.push({
         id: `${result.round}-crash-${crashedId}`,
@@ -143,10 +157,27 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
   const [activity, setActivity] = useState([]);
   const [error, setError] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [crashThreshold, setCrashThreshold] = useState(10);
+  const [autoCrashEnabled, setAutoCrashEnabled] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const history = useRef([]);
   const [historyLength, setHistoryLength] = useState(0);
 
   const isFaultyMode = algorithmMode === "faulty";
+
+  const dismissNotification = useCallback((id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const addNotification = useCallback((notif) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newNotif = { id, ...notif };
+    setNotifications((prev) => [newNotif, ...prev].slice(0, 5));
+
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 5000);
+  }, []);
 
   const algorithm = useMemo(
     () => (isFaultyMode
@@ -158,6 +189,11 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
     () => new SimulationEngine(simulation, algorithm),
     [simulation, algorithm]
   );
+
+  useEffect(() => {
+    if (!engine) return;
+    engine.setCrashProbability(isFaultyMode && autoCrashEnabled ? crashThreshold / 100 : 0);
+  }, [autoCrashEnabled, crashThreshold, engine, isFaultyMode]);
 
   const nodes = simulation.grid.getAllNodes();
   const selectedNode = selectedNodeId === null
@@ -173,9 +209,16 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
     const robot = simulation.robots.find((item) => item.id === robotId);
     if (!robot || !robot.alive) return;
 
+    const coord = robot.currentNode ? coordinateFor(robot.currentNode.id, gridSize) : "Crashed";
     history.current.push(captureSnapshot(simulation, algorithm));
     setHistoryLength(history.current.length);
     robot.crash();
+
+    addNotification({
+      type: "crash",
+      title: "Manual Crash Injected",
+      message: `Robot ${robotId} was manually crashed at ${coord}.`,
+    });
 
     setActivity((current) => [
       {
@@ -186,7 +229,61 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
       },
       ...current,
     ].slice(0, MAX_ACTIVITY_ITEMS));
-  }, [algorithm, simulation]);
+  }, [addNotification, algorithm, gridSize, simulation]);
+
+  const triggerRandomCrashCheck = useCallback(() => {
+    if (!isFaultyMode) return;
+
+    const living = simulation.robots.filter((r) => r.alive);
+    if (living.length <= 1) {
+      addNotification({
+        type: "info",
+        title: "Random Crash Skipped",
+        message: "Only 1 living robot remains. Invariant f < k requires at least 1 survivor.",
+      });
+      return;
+    }
+
+    history.current.push(captureSnapshot(simulation, algorithm));
+    setHistoryLength(history.current.length);
+
+    const thresholdRatio = crashThreshold / 100;
+    const result = engine.crashManager.rollRandomCrashes(
+      simulation.robots,
+      thresholdRatio,
+      { minSurvivors: 1 }
+    );
+
+    if (result.crashedRobots.length > 0) {
+      const crashEvents = [];
+      for (const cr of result.crashedRobots) {
+        const coord = cr.nodeId !== null ? coordinateFor(cr.nodeId, gridSize) : "in-transit";
+        const rollPct = (cr.roll * 100).toFixed(1);
+
+        addNotification({
+          type: "crash",
+          title: "💥 Crash Fault Detected!",
+          message: `Robot ${cr.id} rolled ${rollPct}% (< threshold ${crashThreshold}%) and crashed at ${coord}.`,
+          details: `Random roll: ${cr.roll} | Threshold: ${thresholdRatio.toFixed(2)}`,
+        });
+
+        crashEvents.push({
+          id: `${simulation.round}-random-crash-${cr.id}-${Date.now()}`,
+          round: simulation.round,
+          text: `💥 Robot ${cr.id} crashed via random roll (${rollPct}% < ${crashThreshold}%) at ${coord}.`,
+          kind: "fault",
+        });
+      }
+
+      setActivity((current) => [...crashEvents, ...current].slice(0, MAX_ACTIVITY_ITEMS));
+    } else {
+      addNotification({
+        type: "info",
+        title: "Random Check Passed",
+        message: `All ${result.totalChecked} living robots rolled above the ${crashThreshold}% threshold. None crashed.`,
+      });
+    }
+  }, [addNotification, algorithm, crashThreshold, engine, gridSize, isFaultyMode, simulation]);
 
   const executeStep = useCallback(() => {
     if (algorithm.isStageComplete(simulation, 3)) {
@@ -200,6 +297,19 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
       setHistoryLength(history.current.length);
       const result = engine.step();
       const nextStage = algorithm.getStage(result.round);
+
+      if (result.crashDetails?.length > 0) {
+        for (const crash of result.crashDetails) {
+          const coord = crash.nodeId !== null ? coordinateFor(crash.nodeId, gridSize) : "in-transit";
+          addNotification({
+            type: "crash",
+            title: "💥 Step Crash Fault Detected!",
+            message: `Robot ${crash.id} rolled ${(crash.roll * 100).toFixed(1)}% (< threshold ${crashThreshold}%) and crashed at ${coord}.`,
+            details: `Random roll: ${crash.roll} | Threshold: ${(crash.threshold).toFixed(2)}`,
+          });
+        }
+      }
+
       const events = describeStep(result, previousStage, nextStage).map((event) => {
         if (event.kind !== "movement") return event;
         const robot = simulation.robots.find((item) => item.id === event.robotId);
@@ -217,7 +327,7 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
       setIsRunning(false);
       setError(stepError instanceof Error ? stepError.message : "The simulation stopped unexpectedly.");
     }
-  }, [algorithm, engine, gridSize, simulation]);
+  }, [addNotification, algorithm, crashThreshold, engine, gridSize, simulation]);
 
   const restoreHistoryEntry = useCallback((index) => {
     const snapshot = history.current[index];
@@ -259,9 +369,11 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
 
   return (
     <section className={`${isFullscreen ? "fixed inset-0 z-50 overflow-y-auto bg-background" : "w-full"}`}>
+      <CrashNotificationToast notifications={notifications} onDismiss={dismissNotification} />
+
       {isFaultyMode ? (
         <p className="mb-4 border border-border bg-surface px-4 py-2.5 text-xs leading-relaxed text-foreground-muted">
-          Fault-tolerant mode active (O(√n log n) rounds, Section 4 of Banerjee et al.). Robots coordinate via halving scout/seeker groups and timeouts. You can crash any robot anytime using the <strong>💥 Crash robot</strong> button in Robot details.
+          Fault-tolerant mode active (O(√n log n) rounds, Section 4 of Banerjee et al.). Robots coordinate via halving scout/seeker groups and timeouts. You can crash robots manually via <strong>💥 Crash robot</strong> or use the <strong>🎲 Random Crash Injection</strong> controls.
         </p>
       ) : null}
       {simulationComplete ? (
@@ -319,6 +431,19 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
               onSelectStage={selectStage}
             />
           </SimulationControls>
+
+          {isFaultyMode ? (
+            <RandomCrashControls
+              threshold={crashThreshold}
+              onThresholdChange={setCrashThreshold}
+              autoCrash={autoCrashEnabled}
+              onToggleAutoCrash={() => setAutoCrashEnabled((v) => !v)}
+              onRollCrash={triggerRandomCrashCheck}
+              aliveCount={livingRobots.length}
+              disabled={simulationComplete || Boolean(error)}
+            />
+          ) : null}
+
           {selectedNode ? <NodeInspector node={selectedNode} gridSize={gridSize} /> : null}
           <RobotInspector
             robots={simulation.robots}
