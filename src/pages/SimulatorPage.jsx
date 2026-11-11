@@ -252,31 +252,6 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
     onReset();
   }
 
-  return (
-    <section className="w-full">
-      <SimulationControls
-        round={simulation.round}
-        isRunning={isRunning}
-        speed={speed}
-        onSpeedChange={(nextSpeed) => {
-          if (SPEED_OPTIONS.includes(nextSpeed)) setSpeed(nextSpeed);
-        }}
-        onStep={executeStep}
-        onPreviousStep={previousStep}
-        previousDisabled={historyLength === 0}
-        onToggleRun={() => {
-          if (simulationComplete) return;
-          setIsRunning((running) => !running);
-        }}
-        onReset={reset}
-        disabled={Boolean(error) || simulationComplete}
-      >
-        <StageProgress
-          stages={stageProgress}
-          activeStage={stageNumber}
-          onSelectStage={selectStage}
-        />
-      </SimulationControls>
   function changeFullscreen(nextValue) {
     setIsFullscreen(nextValue);
     onFullscreenChange?.(nextValue);
@@ -336,15 +311,13 @@ export function SimulatorPage({ simulation, gridSize, algorithmMode, onReset, on
               setIsRunning((running) => !running);
             }}
             onReset={reset}
-            disabled={isFaultyMode || Boolean(error) || simulationComplete}
+            disabled={Boolean(error) || simulationComplete}
           >
-            {!isFaultyMode ? (
-              <StageProgress
-                stages={stageProgress}
-                activeStage={stageNumber}
-                onSelectStage={selectStage}
-              />
-            ) : null}
+            <StageProgress
+              stages={stageProgress}
+              activeStage={stageNumber}
+              onSelectStage={selectStage}
+            />
           </SimulationControls>
           {selectedNode ? <NodeInspector node={selectedNode} gridSize={gridSize} /> : null}
           <RobotInspector

@@ -57,9 +57,9 @@ export class FaultyAlgorithm extends AlgorithmInterface {
     };
   }
 
-  getStageBoundary(stage) {
-    if (stage === 1) return this.stage1End;
-    if (stage === 2) return this.stage2End;
+  getStageBoundary() {
+    // Return null so the simulator immediately transitions to the next stage
+    // as soon as the current stage completes, avoiding hundreds of idle round jumps.
     return null;
   }
 

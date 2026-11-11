@@ -1,8 +1,7 @@
 import { FaultyStraightLineNavigation } from "./navigation/FaultyStraightLineNavigation.js";
-import { FaultyBoundaryTraversal } from "./navigation/FaultyBoundaryTraversal.js";
+import { BoundaryNavigation } from "../nonFaulty/navigation/BoundaryNavigation.js";
 
 const STATUS_KEY = "faultyStage1";
-const BOUNDARY_KEY = "faultyBoundaryNav";
 
 /**
  * Stage 1 (Faulty): Move non-singleton groups and boundary robots to grid corners.
@@ -25,6 +24,8 @@ export class FaultyStage1 {
 
   createMessage(observation, round) {
     if (observation.degree === 4) {
+      const boundaryMsg = BoundaryNavigation.createMessage(observation);
+      if (boundaryMsg) return boundaryMsg;
       return this.straightLineNav.createMessage(observation, round);
     }
     return null;
@@ -32,6 +33,19 @@ export class FaultyStage1 {
 
   compute(observation, inbox, round) {
     const memory = observation.memory;
+    const navPhase = memory.faultyStraightLineNavigation?.phase;
+
+    // Active scouts searching or returning home must continue straight-line probe
+    if (["searching", "returning-home"].includes(navPhase)) {
+      const decision = this.straightLineNav.compute(observation, inbox, round);
+      return {
+        ...decision,
+        memoryUpdates: {
+          ...decision.memoryUpdates,
+          [STATUS_KEY]: { status: "in-stage-1" },
+        },
+      };
+    }
 
     // Corner reached (degree 2): remain at corner
     if (observation.degree === 2) {
@@ -44,46 +58,29 @@ export class FaultyStage1 {
       };
     }
 
+    // A boundary robot temporarily probed an internal node (degree 4): return to boundary
+    if (
+      observation.degree === 4 &&
+      memory.boundaryNavigation?.phase === "checking"
+    ) {
+      return BoundaryNavigation.compute(observation);
+    }
+
     // Boundary node (degree 3): move towards corner
     if (observation.degree === 3) {
-      const boundaryState = memory[BOUNDARY_KEY];
-      if (!boundaryState) {
-        // Start moving along boundary from lowest port
-        const port = Math.min(...observation.ports);
-        const started = FaultyBoundaryTraversal.start(observation, port);
-        return {
-          action: started.action,
-          memoryUpdates: {
-            [STATUS_KEY]: { status: "moving-boundary" },
-            [BOUNDARY_KEY]: started.state,
-          },
-        };
-      }
-
-      const step = FaultyBoundaryTraversal.advance(observation, boundaryState);
-      const isCorner = observation.degree === 2 || step.state.phase === "arrived";
+      const decision = BoundaryNavigation.compute(observation);
       return {
-        action: isCorner ? { type: "stay" } : step.action,
+        ...decision,
         memoryUpdates: {
-          [STATUS_KEY]: { status: isCorner ? "at-corner" : "moving-boundary" },
-          [BOUNDARY_KEY]: step.state,
+          ...decision.memoryUpdates,
+          [STATUS_KEY]: { status: "moving-boundary" },
+          faultyStraightLineNavigation: { phase: "idle" },
         },
       };
     }
 
     // Internal node (degree 4):
     if (observation.degree === 4) {
-      // If robot was probing the boundary and stepped into interior, return back
-      if (memory[BOUNDARY_KEY]?.pendingKind === "probe") {
-        const step = FaultyBoundaryTraversal.advance(observation, memory[BOUNDARY_KEY]);
-        return {
-          action: step.action,
-          memoryUpdates: {
-            [STATUS_KEY]: { status: "moving-boundary" },
-            [BOUNDARY_KEY]: step.state,
-          },
-        };
-      }
 
       // Settled singleton check
       if (memory[STATUS_KEY]?.status === "settled-singleton") {

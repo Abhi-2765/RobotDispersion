@@ -14,6 +14,8 @@ export function isFaultyStage1Complete(simulation) {
     if (degree === 2) return true;
 
     if (degree === 4) {
+      if (robot.memory.boundaryNavigation?.phase === "checking") return false;
+
       const coLocatedLiving = robot.currentNode.robots.filter((other) => other.alive);
       const isSettledSingleton =
         robot.memory[STAGE1_KEY]?.status === "settled-singleton" ||
@@ -31,17 +33,18 @@ export function isFaultyStage2Complete(simulation) {
   if (robots.length === 0) return true;
   if (!isFaultyStage1Complete(simulation)) return false;
 
-  const cornerRobots = robots.filter((robot) => robot.currentNode?.getDegree() === 2);
-  if (cornerRobots.length === 0) return true;
-
-  // Check if any corner group is still actively on tour or travelling
-  const inTransit = cornerRobots.some((robot) => {
+  // Check if ANY living robot is currently on the boundary, on tour, waiting, or travelling
+  const inTransit = robots.some((robot) => {
+    if (robot.currentNode?.getDegree() === 3) return true;
     const state = robot.memory[STAGE2_KEY];
     if (!state) return false;
-    return state.phase === "tour" || state.phase === "travelling" || state.phase === "waiting";
+    return state.phase === "tour" || state.phase === "travelling" || state.phase === "waiting" || state.phase === "target-ready";
   });
 
   if (inTransit) return false;
+
+  const cornerRobots = robots.filter((robot) => robot.currentNode?.getDegree() === 2);
+  if (cornerRobots.length === 0) return true;
 
   // All non-singleton corner robots should have gathered at the same corner
   const nonSingletonCornerRobots = cornerRobots.filter(
