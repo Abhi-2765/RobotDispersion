@@ -413,10 +413,10 @@ The crash manager (`CrashManager.js`) enables interactive and programmatic fault
 - **Crash Alerts:** Emits a real-time notification toast displaying the robot ID, roll value, threshold, and coordinates.
 
 <p align="center">
-  <img src="figures/fig6_simulation_ui.png" alt="Simulation UI Mockup" width="750" />
+  <img src="figures/fig6_simulation_ui.png" alt="Faulty Algorithm Interface with Random Crash Injection" width="850" />
 </p>
 
-*Figure 5.2: Interactive User Interface of the RobotDispersion Web Simulator showing real-time grid view, robot memory inspector, and CCM controls.*
+*Figure 5.2: Interactive User Interface of the RobotDispersion Web Simulator executing in Faulty Mode on a $6 \times 6$ unoriented grid. The interface displays: (i) Top status header indicating 26 active robots and 19 occupied nodes under the Faulty Algorithm; (ii) The dedicated **Random Crash Injection** panel featuring the configurable crash threshold slider (10%), on-demand random roll button, and per-step auto-roll toggle; (iii) Node property inspector for vertex $A1$; and (iv) The central unoriented grid graph showing individual robot tokens, curved port wiring, and multi-robot cluster badges.*
 
 ---
 
