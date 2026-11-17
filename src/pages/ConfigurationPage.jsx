@@ -9,6 +9,7 @@ export function ConfigurationPage({
   onRobotCountChange,
   onAlgorithmModeChange,
   onPreview,
+  onOpenTutorials,
 }) {
   return (
     <section className="mx-auto max-w-xl">
@@ -76,6 +77,16 @@ export function ConfigurationPage({
           <span>Starting positions: </span>
           <span className="text-foreground-muted">Random</span>
         </div>
+
+        {onOpenTutorials ? (
+          <button
+            type="button"
+            className="w-full border border-border bg-surface-muted/60 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:border-primary/50"
+            onClick={onOpenTutorials}
+          >
+            Explore Tutorials →
+          </button>
+        ) : null}
 
         <button
           type="button"

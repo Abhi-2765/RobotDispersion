@@ -1,4 +1,13 @@
 import { coordinateFor, getNodeType } from "./gridPresentation.js";
+import {
+  PITCH,
+  PADDING,
+  NODE_RADIUS,
+  PORT_RADIUS,
+  positionFor,
+  directionForPort,
+  getCurvedEdgePath,
+} from "./gridGeometry.js";
 
 const ROBOT_DOT_CLASSES = {
   clay: "fill-[#a95e43]",
@@ -12,31 +21,6 @@ const ROBOT_DOT_CLASSES = {
 };
 
 const ROBOT_COLORS = Object.keys(ROBOT_DOT_CLASSES);
-const PITCH = 68;
-const PADDING = 42;
-const NODE_RADIUS = 20;
-const PORT_OFFSET = 18;
-const PORT_RADIUS = 7;
-
-// Port numbers describe fixed local sockets, not compass directions in the
-// underlying grid. The connection behind a socket is still arbitrary.
-const PORT_DIRECTIONS = [
-  { dx: 1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: -1, dy: 0 },
-  { dx: 0, dy: -1 },
-];
-
-function positionFor(node, size) {
-  return {
-    x: PADDING + (node.id % size) * PITCH,
-    y: PADDING + Math.floor(node.id / size) * PITCH,
-  };
-}
-
-function directionForPort(port) {
-  return PORT_DIRECTIONS[port - 1] ?? { dx: 0, dy: 0 };
-}
 
 function getEdges(nodes, size) {
   const edges = [];
@@ -53,20 +37,10 @@ function getEdges(nodes, size) {
       const end = positionFor(neighbour, size);
       const outgoingDirection = directionForPort(port);
       const incomingDirection = directionForPort(incomingPort);
-      const x1 = start.x + outgoingDirection.dx * PORT_OFFSET;
-      const y1 = start.y + outgoingDirection.dy * PORT_OFFSET;
-      const x2 = end.x + incomingDirection.dx * PORT_OFFSET;
-      const y2 = end.y + incomingDirection.dy * PORT_OFFSET;
-      // Keep the wires visibly curved without letting long links form large,
-      // confusing loops across the whole drawing.
-      const controlDistance = Math.min(
-        PITCH * 1.1,
-        Math.max(PITCH * 0.34, Math.hypot(x2 - x1, y2 - y1) * 0.28)
-      );
 
       edges.push({
         key: `${node.id}-${neighbour.id}`,
-        path: `M ${x1} ${y1} C ${x1 + outgoingDirection.dx * controlDistance} ${y1 + outgoingDirection.dy * controlDistance}, ${x2 + incomingDirection.dx * controlDistance} ${y2 + incomingDirection.dy * controlDistance}, ${x2} ${y2}`,
+        path: getCurvedEdgePath(start, end, outgoingDirection, incomingDirection),
       });
     }
   }
@@ -195,6 +169,7 @@ export function GridNetworkSvg({
   onSelectNode,
   viewportReserve = 16,
   isFullscreen = false,
+  renderOverlay = null,
 }) {
   const dimension = PADDING * 2 + (gridSize - 1) * PITCH;
   const preferredWidth = dimension * 1.6;
@@ -272,6 +247,7 @@ export function GridNetworkSvg({
             <title>{`Node ${coordinateFor(node.id, gridSize)}; ports: ${node.getNeighbours().map(([port]) => port).join(", ") || "none"}; robots: ${node.robots.map((robot) => robot.id).join(", ") || "none"}`}</title>
           </g>;
         })}
+        {typeof renderOverlay === "function" ? renderOverlay({ nodes, gridSize, positionFor }) : renderOverlay}
       </svg>
     </div>
   );
